@@ -97,17 +97,17 @@ export default function AdminDashboard() {
 
   const statIcons = [
     <Clipboard key="clipboard" size={18} color="#2563eb" />,
-    <Clock key="clock" size={18} color="#64748b" />,
-    <Zap key="zap" size={18} color="#d97706" />,
+    <Zap key="zap" size={18} color="#06b6d4" />,
+    <Clock key="clock" size={18} color="#8b5cf6" />,
     <CheckCircle key="check" size={18} color="#16a34a" />,
   ];
 
-  const statIconBgs = ['#eef2f7', '#f1f5f9', '#fff7ed', '#f0fdf4'];
+  const statIconBgs = ['#eef2f7', '#ecf9ff', '#f3e8ff', '#f0fdf4'];
 
   const stats = [
     { label: 'Total',      value: exams.length,                                          color: '#2563eb' },
-    { label: 'Scheduled',  value: exams.filter(e => e.status === 'scheduled').length,    color: '#64748b' },
-    { label: 'Window Open',value: exams.filter(e => e.status === 'window_open').length,  color: '#d97706' },
+    { label: 'Active',     value: exams.filter(e => !e.expired).length,                  color: '#06b6d4' },
+    { label: 'Archived',   value: exams.filter(e => e.expired).length,                   color: '#8b5cf6' },
     { label: 'Decrypted',  value: exams.filter(e => e.status === 'decrypted').length,    color: '#16a34a' },
   ];
 

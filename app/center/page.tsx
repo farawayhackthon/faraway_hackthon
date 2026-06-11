@@ -296,7 +296,7 @@ export default function CenterPage() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 8 }}>
               <span className="section-label">
-                {showHistory ? `History (${archivedExams.length})` : `Active Exams (${activeExams.length})`}
+                {showHistory ? `Expired Exams(${archivedExams.length})` : `Active Exams (${activeExams.length})`}
               </span>
               <div style={{ display: 'flex', gap: 4 }}>
                 <button
