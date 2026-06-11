@@ -1,10 +1,10 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import CountdownTimer from '@/components/CountdownTimer';
 import SignaturePanel from '@/components/SignaturePanel';
-import { Key, Pen, Zap, CheckCircle, Ban, Clock, Inbox, ArrowLeft, Document, Clipboard, LockOpen, AlertTriangle, XCircle } from '@/components/Icons';
+import { Key, Pen, Zap, CheckCircle, Ban, Clock, Inbox, ArrowLeft, Document, Clipboard, LockOpen, AlertTriangle, XCircle, Download, Printer } from '@/components/Icons';
 
 interface Exam {
   id: string; title: string; subject: string; examTime: string;
@@ -18,6 +18,7 @@ interface UserInfo { id: string; name: string; role: 'center_head' | 'invigilato
 
 export default function CenterPage() {
   const router = useRouter();
+  const paperRef = useRef<HTMLDivElement>(null);
   const [user, setUser] = useState<UserInfo | null>(null);
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +28,7 @@ export default function CenterPage() {
   const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
   const [auditLog, setAuditLog] = useState<Record<string, string> | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   const authFetch = useCallback(async (url: string, options?: RequestInit) => {
     const t = localStorage.getItem('token') || '';
@@ -130,6 +132,69 @@ export default function CenterPage() {
     }
   };
 
+  const handleDownloadPDF = async () => {
+    if (!paperRef.current || !selectedExam) return;
+    
+    try {
+      const html2pdf = (await import('html2pdf.js')).default;
+      const element = paperRef.current;
+      const filename = `${selectedExam.subject.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+      
+      const options = {
+        margin: 10,
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
+      };
+      
+      html2pdf().set(options).from(element).save();
+      setMessage({ type: 'success', text: 'PDF downloaded successfully!' });
+    } catch (error) {
+      console.error('PDF download error:', error);
+      setMessage({ type: 'error', text: 'Failed to generate PDF. Please try again.' });
+    }
+  };
+
+  const handlePrint = () => {
+    if (!paperRef.current) return;
+    
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        setMessage({ type: 'error', text: 'Failed to open print dialog. Please check your popup settings.' });
+        return;
+      }
+      
+      const content = paperRef.current.innerHTML;
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>${selectedExam?.subject || 'Exam Paper'}</title>
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; margin: 20px; }
+              h2, h3 { color: #333; }
+              pre { background: #f4f4f4; padding: 10px; border-radius: 4px; overflow-x: auto; }
+              .meta-info { color: #666; font-size: 0.9em; margin: 10px 0; }
+            </style>
+          </head>
+          <body>
+            <h2>${selectedExam?.title || 'Exam Paper'}</h2>
+            <p class="meta-info">Subject: ${selectedExam?.subject}</p>
+            <p class="meta-info">Date: ${new Date().toLocaleString()}</p>
+            <hr />
+            ${content}
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    } catch (error) {
+      console.error('Print error:', error);
+      setMessage({ type: 'error', text: 'Failed to open print dialog. Please try again.' });
+    }
+  };
+
   const myRole = user?.role;
 
   const getMySignatureStatus = (exam: Exam) => {
@@ -180,6 +245,11 @@ export default function CenterPage() {
     }
   };
 
+  // Filter exams into active and archived
+  const activeExams = exams.filter(e => !e.expired);
+  const archivedExams = exams.filter(e => e.expired);
+  const displayExams = showHistory ? archivedExams : activeExams;
+
   return (
     <div className="page-bg" style={{ minHeight: '100vh' }}>
       <Navbar user={user} />
@@ -224,25 +294,69 @@ export default function CenterPage() {
 
           {/* ── Left: Exam List ── */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <span className="section-label">Assigned Exams ({exams.length})</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 8 }}>
+              <span className="section-label">
+                {showHistory ? `History (${archivedExams.length})` : `Active Exams (${activeExams.length})`}
+              </span>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  onClick={() => setShowHistory(false)}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: 4,
+                    border: 'none',
+                    background: !showHistory ? '#2563eb' : 'transparent',
+                    color: !showHistory ? 'white' : 'var(--text-3)',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => !showHistory && (e.currentTarget.style.background = '#1d4ed8')}
+                  onMouseLeave={(e) => !showHistory && (e.currentTarget.style.background = '#2563eb')}
+                >
+                  Active
+                </button>
+                <button
+                  onClick={() => setShowHistory(true)}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: 4,
+                    border: 'none',
+                    background: showHistory ? '#7c3aed' : 'transparent',
+                    color: showHistory ? 'white' : 'var(--text-3)',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => showHistory && (e.currentTarget.style.background = '#6d28d9')}
+                  onMouseLeave={(e) => showHistory && (e.currentTarget.style.background = '#7c3aed')}
+                >
+                  History
+                </button>
+              </div>
             </div>
 
             {loading ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '80px 0', color: 'var(--text-3)' }}>
                 <span className="spinner" style={{ borderColor: 'rgba(37,99,235,0.2)', borderTopColor: '#2563eb' }} /> Loading…
               </div>
-            ) : exams.length === 0 ? (
+            ) : displayExams.length === 0 ? (
               <div className="card" style={{ padding: '64px 24px', textAlign: 'center' }}>
                 <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
                   <Inbox size={40} color="var(--text-3)" />
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>No exams assigned yet</div>
-                <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Exams assigned to you by the admin will appear here.</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>
+                  {showHistory ? 'No exam history' : 'No active exams'}
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
+                  {showHistory ? 'Expired exams will appear here.' : 'Active exams will appear here.'}
+                </div>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {exams.map((exam) => {
+                {displayExams.map((exam) => {
                   const signed = getMySignatureStatus(exam);
                   const isSelected = selectedExam?.id === exam.id;
                   return (
@@ -344,15 +458,75 @@ export default function CenterPage() {
                 {/* Decrypted Paper */}
                 {(decryptedContent || selectedExam.decryptedContent) && (
                   <div className="card card-glow-green anim-fade-up" style={{ padding: 24 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 8, background: '#f0fdf4', border: '1px solid rgba(22,163,74,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Document size={18} color="#16a34a" />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 20 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 8, background: '#f0fdf4', border: '1px solid rgba(22,163,74,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Document size={18} color="#16a34a" />
+                        </div>
+                        <div>
+                          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>Exam Paper — Decrypted</h3>
+                          <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+                            {selectedExam.originalFilename} · For official use only
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>Exam Paper — Decrypted</h3>
-                        <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-                          {selectedExam.originalFilename} · For official use only
-                        </p>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          onClick={handleDownloadPDF}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '8px 12px',
+                            borderRadius: 6,
+                            border: '1px solid rgba(22,163,74,0.2)',
+                            background: '#f0fdf4',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: '#16a34a',
+                            transition: 'all 0.2s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = '#dcfce7';
+                            e.currentTarget.style.borderColor = 'rgba(22,163,74,0.4)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = '#f0fdf4';
+                            e.currentTarget.style.borderColor = 'rgba(22,163,74,0.2)';
+                          }}
+                        >
+                          <Download size={14} />
+                          PDF
+                        </button>
+                        <button
+                          onClick={handlePrint}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '8px 12px',
+                            borderRadius: 6,
+                            border: '1px solid rgba(22,163,74,0.2)',
+                            background: '#f0fdf4',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: '#16a34a',
+                            transition: 'all 0.2s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = '#dcfce7';
+                            e.currentTarget.style.borderColor = 'rgba(22,163,74,0.4)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = '#f0fdf4';
+                            e.currentTarget.style.borderColor = 'rgba(22,163,74,0.2)';
+                          }}
+                        >
+                          <Printer size={14} />
+                          Print
+                        </button>
                       </div>
                     </div>
 
@@ -368,7 +542,7 @@ export default function CenterPage() {
                       </div>
                     )}
 
-                    <div className="paper-view">
+                    <div className="paper-view" ref={paperRef}>
                       {decryptedContent || selectedExam.decryptedContent}
                     </div>
                   </div>

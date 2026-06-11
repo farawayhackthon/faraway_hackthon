@@ -27,6 +27,7 @@ export default function AdminDashboard() {
   const [demoLoading, setDemoLoading] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   const showToast = (type: 'success' | 'error', text: string) => {
     setToast({ type, text });
@@ -237,28 +238,76 @@ export default function AdminDashboard() {
         {/* Exam list */}
         <div className="anim-fade-up anim-delay-2">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div>
-              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>All Exam Papers</span>
-              <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-3)' }}>{exams.length} total</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
+                  {showHistory ? 'Archived Exams' : 'Active Exams'}
+                </span>
+                <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-3)' }}>
+                  {showHistory ? exams.filter(e => e.expired).length : exams.filter(e => !e.expired).length} total
+                </span>
+              </div>
             </div>
-            <button onClick={fetchExams} className="btn btn-ghost btn-sm">↻ Refresh</button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 4, background: 'var(--surface)', padding: '4px', borderRadius: 6 }}>
+                <button
+                  onClick={() => setShowHistory(false)}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: 4,
+                    border: 'none',
+                    background: !showHistory ? '#2563eb' : 'transparent',
+                    color: !showHistory ? 'white' : 'var(--text-3)',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  Active
+                </button>
+                <button
+                  onClick={() => setShowHistory(true)}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: 4,
+                    border: 'none',
+                    background: showHistory ? '#7c3aed' : 'transparent',
+                    color: showHistory ? 'white' : 'var(--text-3)',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  Archived
+                </button>
+              </div>
+              <button onClick={fetchExams} className="btn btn-ghost btn-sm">↻ Refresh</button>
+            </div>
           </div>
 
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '80px 0', color: 'var(--text-3)' }}>
               <span className="spinner" style={{ borderColor: '#e2e8f0', borderTopColor: 'var(--blue)' }} /> Loading exams…
             </div>
-          ) : exams.length === 0 ? (
+          ) : (showHistory ? exams.filter(e => e.expired) : exams.filter(e => !e.expired)).length === 0 ? (
             <div className="card" style={{ padding: '64px 24px', textAlign: 'center' }}>
               <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
                 <Inbox size={40} color="var(--text-3)" />
               </div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>No exam papers yet</div>
-              <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Click &quot;Upload Exam&quot; or &quot;Quick Demo&quot; to get started.</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>
+                {showHistory ? 'No archived exams' : 'No active exams'}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
+                {showHistory 
+                  ? 'Expired exams will appear here.' 
+                  : 'Click "Upload Exam" or "Quick Demo" to get started.'}
+              </div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {exams.map((exam, i) => <ExamCard key={exam.id} exam={exam} role="admin" index={i} />)}
+              {(showHistory ? exams.filter(e => e.expired) : exams.filter(e => !e.expired)).map((exam, i) => <ExamCard key={exam.id} exam={exam} role="admin" index={i} />)}
             </div>
           )}
         </div>

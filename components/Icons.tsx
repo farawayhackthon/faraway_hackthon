@@ -23,6 +23,8 @@ export {
   LogOut,
   Beaker as Flask,
   Upload,
+  Download,
+  Printer,
 } from 'lucide-react';
 
 // Clock is also used as AlarmClock in some components
