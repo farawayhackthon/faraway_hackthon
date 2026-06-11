@@ -1,0 +1,140 @@
+{
+  "users": [
+    {
+      "id": "user-admin-001",
+      "username": "admin",
+      "passwordHash": "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4oR5K1.Bca",
+      "role": "admin",
+      "name": "Dr. Rajesh Kumar (Exam Board)"
+    },
+    {
+      "id": "user-ch-001",
+      "username": "centerhead",
+      "passwordHash": "$2a$12$YYnr76blgqVHnEzKjuopQ.lX3VBW/H5K7Ul8HJbMNyV6bEjz6O4..",
+      "role": "center_head",
+      "name": "Prof. Anita Sharma (Center Head)",
+      "centerId": "center-001"
+    },
+    {
+      "id": "user-inv-001",
+      "username": "invigilator",
+      "passwordHash": "$2a$12$dYt4f6WN8UoB3v2kHmP5S.h7z4T2ixiRG5BbYRQ8pBN9fBUNpLPOm",
+      "role": "invigilator",
+      "name": "Mr. Vikram Singh (Invigilator)",
+      "centerId": "center-001"
+    }
+  ],
+  "exams": [
+    {
+      "id": "534a92d6-84e5-4a7c-9962-d0546d246e43",
+      "title": "Mathematics Paper I",
+      "subject": "Advanced Calculus",
+      "examTime": "2026-06-09T06:21:46.000Z",
+      "centerHeadId": "user-ch-001",
+      "invigilatorId": "user-inv-001",
+      "encryptedPayload": "z6J3QIk5iCnL8BcmKkBMMtq3pAG+8n+uoDdr8DYuXIPcnOOwX/ZR7ZC366DERKA3R1lD1JgFdSRjlfv7UNwtYb/6vHD1QXFzqW329wSKzRf/WSea57QNtOHfydU+w7NSqkDRflN0B7oklakpinS4DHgbNJqwQZcDDbIyxMjprgsFPoeGrqsHSVH+1htrC9dpeuo8BCau6bsBrw086abIpdr1l4ZoHoXjwfCZCRLHNfU9/JFe+5tMN1Wn/0S9kGb4xNpCYfUHXltaJ1WtlJXpRpWXbGuH7w+Y4MXBWnUQbrwdeu7yjssI",
+      "salt": "faed6f879ac34b75d79823633828481f",
+      "encryptedKey": "CFy22Ki35RvFjD2ay07DEzYhZmh5bW8r2JzVhjbr2tcco1h3ilg+BOi0TpAWaWDES4jCkkPuMI6oLnXHYo9nWXdCSFc7hKDwGr2uMQMmxOkoXK2xIh1f7UtRlh/jrnbN",
+      "keySalt": "c3cf2e07a17a3865a38c1e34966d86dd",
+      "uploadedAt": "2026-06-09T06:06:46.759Z",
+      "status": "decrypted",
+      "signatures": {
+        "centerHead": true,
+        "invigilator": true,
+        "centerHeadAt": "2026-06-09T06:19:14.094Z",
+        "invigilatorAt": "2026-06-09T06:19:33.007Z"
+      },
+      "uploadedBy": "user-admin-001",
+      "originalFilename": "math_paper_1.txt",
+      "decryptedContent": "SECTION A - Question 1: Evaluate integral of x^2 * e^x dx. Question 2: Find the derivative of f(x) = ln(sin(x^2)). SECTION B - Question 3: Prove that the sum of angles in any triangle is 180 degrees."
+    },
+    {
+      "id": "ba8a411e-95f1-4fd0-8ae6-8d8863b18cde",
+      "title": "[DEMO] Advanced Mathematics Paper — 11:39:42 am",
+      "subject": "Advanced Mathematics",
+      "examTime": "2026-06-09T06:13:41.921Z",
+      "centerHeadId": "user-ch-001",
+      "invigilatorId": "user-inv-001",
+      "encryptedPayload": "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",
+      "salt": "4e623834cd1d9249e43dfc25d83437aa",
+      "encryptedKey": "RIz+WLmCK4snCULaJNdH2Dmp+umj1Y5PQiX+DLVAzzX5VfsQeqkcWFxUCDZWn9pX11v6FSO55w6a33XFIHCRI6+GkBkRE+WmlJ8U0CnLbva+X90l1bN267KOeFVcpoOX",
+      "keySalt": "169c624191967832c947200c2efdb746",
+      "uploadedAt": "2026-06-09T06:09:42.032Z",
+      "status": "decrypted",
+      "signatures": {
+        "centerHead": true,
+        "invigilator": true,
+        "centerHeadAt": "2026-06-09T06:09:42.122Z",
+        "invigilatorAt": "2026-06-09T06:10:05.427Z"
+      },
+      "uploadedBy": "user-admin-001",
+      "originalFilename": "advanced_math_paper_1.txt",
+      "decryptedContent": "CONFIDENTIAL — EXAM PAPER\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nSubject: Advanced Mathematics — Paper I\nExam Date: Tuesday, 9 June 2026\nDuration: 3 Hours     Max Marks: 100\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nSECTION A — Short Answer (20 Marks)\n\nQ1. Evaluate: ∫₀^π sin²(x) dx                                    [4 marks]\n\nQ2. Find the eigenvalues of the matrix:\n    [2  1]\n    [1  2]                                                        [4 marks]\n\nQ3. If f(x) = e^(x²), find f''(x).                               [4 marks]\n\nQ4. Prove that √2 is irrational.                                  [4 marks]\n\nQ5. Find the radius of convergence of Σ (n! xⁿ) / nⁿ            [4 marks]\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nSECTION B — Long Answer (40 Marks)\n\nQ6. Using Lagrange multipliers, find the maximum value of\n    f(x,y) = xy subject to x² + y² = 1.                         [10 marks]\n\nQ7. Solve the differential equation:\n    d²y/dx² + 4y = cos(2x)\n    with y(0) = 0, y'(0) = 1                                     [10 marks]\n\nQ8. State and prove the Fundamental Theorem of Calculus.         [10 marks]\n\nQ9. Find the Taylor series expansion of ln(1+x) about x=0\n    and determine its radius of convergence.                      [10 marks]\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nSECTION C — Application Problems (40 Marks)\n\nQ10. A particle moves with velocity v(t) = t² - 4t + 3 m/s.\n     Find: (a) displacement from t=0 to t=4\n           (b) distance traveled from t=0 to t=4\n           (c) when is the particle at rest?                      [15 marks]\n\nQ11. Using Green's Theorem, evaluate the line integral:\n     ∮ (y² dx + x² dy) where C is the boundary of the\n     square with vertices (0,0), (1,0), (1,1), (0,1).           [15 marks]\n\nQ12. Prove that every convergent sequence is Cauchy, and\n     give an example showing the converse is not always true\n     in a general metric space.                                   [10 marks]\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nEND OF PAPER — This paper contains 3 sections and 12 questions.\nDo not turn over until instructed by the invigilator."
+    },
+    {
+      "id": "efe410dc-e61b-4ecd-a085-d9ffb8904b95",
+      "title": "[DEMO] Advanced Mathematics Paper — 11:52:46 am",
+      "subject": "Advanced Mathematics",
+      "examTime": "2026-06-09T06:28:45.944Z",
+      "centerHeadId": "user-ch-001",
+      "invigilatorId": "user-inv-001",
+      "encryptedPayload": "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",
+      "salt": "2315592e43a2307bbc9043353c7483a3",
+      "encryptedKey": "LdK/Mh5pEQDl6YVdmOudcoJFCyI/4tbDpD3R+08jHaqaYx0gNIdJYJC9o78zWcRbSbNvKQsxLlfBb4n5NxPOfTU+A4Jll7f9CXMtMfjK93yBvzkVhWOZ8BIvA0iFvrYm",
+      "keySalt": "b2fcc41d9fcd467e250f5507eb6d8a92",
+      "uploadedAt": "2026-06-09T06:22:46.615Z",
+      "status": "scheduled",
+      "signatures": {
+        "centerHead": true,
+        "invigilator": true,
+        "invigilatorAt": "2026-06-09T06:45:27.272Z",
+        "centerHeadAt": "2026-06-09T06:58:30.852Z"
+      },
+      "uploadedBy": "user-admin-001",
+      "originalFilename": "advanced_math_paper_1.txt"
+    },
+    {
+      "id": "9dfd5ebb-b6a1-4cec-8090-f424019ce220",
+      "title": "[DEMO] Advanced Mathematics Paper — 12:28:17 pm",
+      "subject": "Advanced Mathematics",
+      "examTime": "2026-06-09T07:04:17.225Z",
+      "centerHeadId": "user-ch-001",
+      "invigilatorId": "user-inv-001",
+      "encryptedPayload": "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",
+      "salt": "48ef323926492cf62036a22dc18bcc21",
+      "encryptedKey": "o14wON8N+1bPJsiuV118fWgiutzjCRPPgcE2vSX9J47bPMMRIb1Z/7bqf3AfIhl2qEzm+/MIsun83H4eoAC28O7Ynhznt6mWfq0IbDAd9gclRjgtH9pv23zEXNIwLNmy",
+      "keySalt": "dda7e16876df31cd8855a836791c5881",
+      "uploadedAt": "2026-06-09T06:58:17.429Z",
+      "status": "scheduled",
+      "signatures": {
+        "centerHead": false,
+        "invigilator": false
+      },
+      "uploadedBy": "user-admin-001",
+      "originalFilename": "advanced_math_paper_1.txt"
+    },
+    {
+      "id": "89c8fd18-3b29-4785-bebe-2c745459f55b",
+      "title": "[DEMO] Advanced Mathematics Paper — 9:22:31 am",
+      "subject": "Advanced Mathematics",
+      "examTime": "2026-06-11T03:58:31.581Z",
+      "centerHeadId": "user-ch-001",
+      "invigilatorId": "user-inv-001",
+      "encryptedPayload": "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",
+      "salt": "a2e84cd66f4a46888fa8def107126964",
+      "encryptedKey": "4giNPHgeny+/CVmJ0JPJeMflwRgE9wGlMVfuTPRU73sqgbz1Hr+Hf0YOvEC0Ep4DBLz0lZIFhhLfOgEqWWRBT9cGcd1nH8f/nkrqNUC/uULcCFuJh4z2kcNNPIuUWn3H",
+      "keySalt": "8fb31478018d0922b50505010a2c3996",
+      "uploadedAt": "2026-06-11T03:52:31.998Z",
+      "status": "decrypted",
+      "signatures": {
+        "centerHead": true,
+        "invigilator": true,
+        "centerHeadAt": "2026-06-11T03:53:59.524Z",
+        "invigilatorAt": "2026-06-11T03:54:11.355Z"
+      },
+      "uploadedBy": "user-admin-001",
+      "originalFilename": "advanced_math_paper_1.txt",
+      "decryptedContent": "CONFIDENTIAL — EXAM PAPER\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nSubject: Advanced Mathematics — Paper I\nExam Date: Thursday, 11 June 2026\nDuration: 3 Hours     Max Marks: 100\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nSECTION A — Short Answer (20 Marks)\n\nQ1. Evaluate: ∫₀^π sin²(x) dx                                    [4 marks]\n\nQ2. Find the eigenvalues of the matrix:\n    [2  1]\n    [1  2]                                                        [4 marks]\n\nQ3. If f(x) = e^(x²), find f''(x).                               [4 marks]\n\nQ4. Prove that √2 is irrational.                                  [4 marks]\n\nQ5. Find the radius of convergence of Σ (n! xⁿ) / nⁿ            [4 marks]\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nSECTION B — Long Answer (40 Marks)\n\nQ6. Using Lagrange multipliers, find the maximum value of\n    f(x,y) = xy subject to x² + y² = 1.                         [10 marks]\n\nQ7. Solve the differential equation:\n    d²y/dx² + 4y = cos(2x)\n    with y(0) = 0, y'(0) = 1                                     [10 marks]\n\nQ8. State and prove the Fundamental Theorem of Calculus.         [10 marks]\n\nQ9. Find the Taylor series expansion of ln(1+x) about x=0\n    and determine its radius of convergence.                      [10 marks]\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nSECTION C — Application Problems (40 Marks)\n\nQ10. A particle moves with velocity v(t) = t² - 4t + 3 m/s.\n     Find: (a) displacement from t=0 to t=4\n           (b) distance traveled from t=0 to t=4\n           (c) when is the particle at rest?                      [15 marks]\n\nQ11. Using Green's Theorem, evaluate the line integral:\n     ∮ (y² dx + x² dy) where C is the boundary of the\n     square with vertices (0,0), (1,0), (1,1), (0,1).           [15 marks]\n\nQ12. Prove that every convergent sequence is Cauchy, and\n     give an example showing the converse is not always true\n     in a general metric space.                                   [10 marks]\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nEND OF PAPER — This paper contains 3 sections and 12 questions.\nDo not turn over until instructed by the invigilator."
+    }
+  ]
+}

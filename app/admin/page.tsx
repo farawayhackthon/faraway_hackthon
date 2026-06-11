@@ -1,0 +1,268 @@
+'use client';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import Navbar from '@/components/Navbar';
+import ExamCard from '@/components/ExamCard';
+import { Clipboard, Clock, Zap, CheckCircle, XCircle, Flask, LockShield, Inbox, Upload } from '@/components/Icons';
+
+interface User { id: string; name: string; role: string; username: string; }
+interface Exam {
+  id: string; title: string; subject: string; examTime: string;
+  status: string; minutesUntilExam: number; windowOpen: boolean; expired: boolean;
+  signatures: { centerHead: boolean; invigilator: boolean };
+  centerHeadName: string; invigilatorName: string; uploadedByName: string;
+  originalFilename?: string;
+}
+
+const EMPTY_FORM = { title: '', subject: '', examTime: '', centerHeadId: '', invigilatorId: '', content: '', filename: 'exam-paper.txt' };
+
+export default function AdminDashboard() {
+  const router = useRouter();
+  const [user, setUser] = useState<{ name: string; role: string } | null>(null);
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const showToast = (type: 'success' | 'error', text: string) => {
+    setToast({ type, text });
+    setTimeout(() => setToast(null), 5000);
+  };
+
+  const authFetch = useCallback((url: string, opts?: RequestInit) => {
+    const t = localStorage.getItem('token') || '';
+    return fetch(url, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}`, ...opts?.headers } });
+  }, []);
+
+  const fetchExams = useCallback(async () => {
+    const res = await authFetch('/api/exam/list');
+    if (res.ok) { const d = await res.json(); setExams(d.exams || []); }
+  }, [authFetch]);
+
+  useEffect(() => {
+    const t = localStorage.getItem('token');
+    const u = localStorage.getItem('user');
+    const r = localStorage.getItem('role');
+    if (!t || r !== 'admin') { router.push('/'); return; }
+    if (u) setUser(JSON.parse(u));
+
+    authFetch('/api/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {});
+    authFetch('/api/exam/list').then(r => r.json()).then(d => { setExams(d.exams || []); setLoading(false); }).catch(() => setLoading(false));
+
+    const iv = setInterval(fetchExams, 30_000);
+    return () => clearInterval(iv);
+  }, [router, authFetch, fetchExams]);
+
+  const centerHeads  = users.filter(u => u.role === 'center_head');
+  const invigilators = users.filter(u => u.role === 'invigilator');
+
+  const minExamTime = () => { const d = new Date(); d.setMinutes(d.getMinutes() + 11); return d.toISOString().slice(0, 16); };
+
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUploadLoading(true);
+    try {
+      const res = await authFetch('/api/exam/upload', { method: 'POST', body: JSON.stringify(form) });
+      const d = await res.json();
+      if (res.ok) { showToast('success', d.message); setUploadOpen(false); setForm(EMPTY_FORM); fetchExams(); }
+      else showToast('error', d.error);
+    } catch { showToast('error', 'Network error. Please try again.'); }
+    finally { setUploadLoading(false); }
+  };
+
+  const handleDemo = async () => {
+    setDemoLoading(true);
+    try {
+      const res = await authFetch('/api/exam/demo', { method: 'POST', body: JSON.stringify({ minutesFromNow: 6 }) });
+      const d = await res.json();
+      if (res.ok) { showToast('success', `${d.message} — Login as Center Head & Invigilator within 1 min.`); fetchExams(); }
+      else showToast('error', d.error);
+    } catch { showToast('error', 'Network error.'); }
+    finally { setDemoLoading(false); }
+  };
+
+  const handleFileRead = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setForm(f => ({ ...f, filename: file.name }));
+    const reader = new FileReader();
+    reader.onload = ev => setForm(f => ({ ...f, content: ev.target?.result as string || '' }));
+    reader.readAsText(file);
+  };
+
+  const statIcons = [
+    <Clipboard key="clipboard" size={18} color="#2563eb" />,
+    <Clock key="clock" size={18} color="#64748b" />,
+    <Zap key="zap" size={18} color="#d97706" />,
+    <CheckCircle key="check" size={18} color="#16a34a" />,
+  ];
+
+  const statIconBgs = ['#eef2f7', '#f1f5f9', '#fff7ed', '#f0fdf4'];
+
+  const stats = [
+    { label: 'Total',      value: exams.length,                                          color: '#2563eb' },
+    { label: 'Scheduled',  value: exams.filter(e => e.status === 'scheduled').length,    color: '#64748b' },
+    { label: 'Window Open',value: exams.filter(e => e.status === 'window_open').length,  color: '#d97706' },
+    { label: 'Decrypted',  value: exams.filter(e => e.status === 'decrypted').length,    color: '#16a34a' },
+  ];
+
+  return (
+    <div className="page-bg" style={{ minHeight: '100vh' }}>
+      <Navbar user={user} />
+
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: 'fixed', top: 72, right: 24, zIndex: 99, maxWidth: 400,
+          padding: '14px 18px', borderRadius: 8, fontSize: 13, lineHeight: 1.5,
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: '#fff',
+          borderLeft: toast.type === 'success' ? '3px solid #16a34a' : '3px solid #dc2626',
+          color: toast.type === 'success' ? '#166534' : '#991b1b',
+          boxShadow: 'var(--shadow-lg)',
+          animation: 'fadeUp 0.3s ease-out'
+        }}>
+          {toast.type === 'success'
+            ? <CheckCircle size={16} color="#16a34a" />
+            : <XCircle size={16} color="#dc2626" />}
+          {toast.text}
+        </div>
+      )}
+
+      <main style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
+
+        {/* Page header */}
+        <div className="anim-fade-up" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 32 }}>
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4, letterSpacing: '-0.02em' }}>Admin Dashboard</h1>
+            <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Manage exam papers, encryption, and personnel assignment</p>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+            <button id="btn-demo-exam" onClick={handleDemo} disabled={demoLoading} className="btn btn-ghost">
+              {demoLoading ? <><span className="spinner spinner-sm" /> Creating…</> : <><Flask size={15} /> Quick Demo</>}
+            </button>
+            <button id="btn-upload-exam" onClick={() => { setUploadOpen(!uploadOpen); }} className="btn btn-primary">
+              {uploadOpen ? '✕  Close' : <><Upload size={15} /> Upload Exam</>}
+            </button>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="anim-fade-up anim-delay-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 28 }}>
+          {stats.map((s, i) => (
+            <div key={i} className="stat-card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: statIconBgs[i], display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {statIcons[i]}
+                </div>
+                <span style={{ fontSize: 26, fontWeight: 700, color: s.color, letterSpacing: '-0.03em' }}>{s.value}</span>
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Upload Panel */}
+        {uploadOpen && (
+          <div className="card anim-fade-up" style={{ padding: 28, marginBottom: 28, borderColor: 'var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 8, background: '#eef2f7', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <LockShield size={18} color="var(--navy)" />
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Upload &amp; Encrypt Exam Paper</div>
+                <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>Content is encrypted with AES-256-GCM. Key is time-locked until T−5 min.</div>
+              </div>
+            </div>
+
+            <form onSubmit={handleUpload}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                <div>
+                  <label className="field-label" htmlFor="exam-title">Exam Title *</label>
+                  <input id="exam-title" className="input" placeholder="e.g. Advanced Mathematics — Paper 1" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} required />
+                </div>
+                <div>
+                  <label className="field-label" htmlFor="exam-subject">Subject *</label>
+                  <input id="exam-subject" className="input" placeholder="e.g. Mathematics" value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value }))} required />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label className="field-label" htmlFor="exam-time">Exam Date &amp; Time * (minimum 10 min from now)</label>
+                <input id="exam-time" className="input" type="datetime-local" min={minExamTime()} value={form.examTime} onChange={e => setForm(f => ({ ...f, examTime: e.target.value }))} required />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                <div>
+                  <label className="field-label" htmlFor="center-head-select">Assign Center Head *</label>
+                  <select id="center-head-select" className="input" value={form.centerHeadId} onChange={e => setForm(f => ({ ...f, centerHeadId: e.target.value }))} required>
+                    <option value="">— Select —</option>
+                    {centerHeads.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="field-label" htmlFor="invigilator-select">Assign Invigilator *</label>
+                  <select id="invigilator-select" className="input" value={form.invigilatorId} onChange={e => setForm(f => ({ ...f, invigilatorId: e.target.value }))} required>
+                    <option value="">— Select —</option>
+                    {invigilators.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label className="field-label" htmlFor="file-upload">Upload file (txt / pdf) — optional</label>
+                <input id="file-upload" className="input" type="file" accept=".txt,.pdf,.doc,.docx" onChange={handleFileRead} style={{ height: 'auto', padding: '10px 14px', cursor: 'pointer' }} />
+                <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 5 }}>Binary files will be read as text in this prototype.</p>
+              </div>
+
+              <div style={{ marginBottom: 24 }}>
+                <label className="field-label" htmlFor="exam-content">Exam Paper Content * (paste or upload above)</label>
+                <textarea id="exam-content" className="input" style={{ minHeight: 180 }} placeholder="Paste exam questions here…" value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))} required />
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button id="btn-encrypt-upload" type="submit" className="btn btn-primary" disabled={uploadLoading}>
+                  {uploadLoading ? <><span className="spinner" /> Encrypting…</> : <><LockShield size={15} /> Encrypt & Store Securely</>}
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => setUploadOpen(false)}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Exam list */}
+        <div className="anim-fade-up anim-delay-2">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>All Exam Papers</span>
+              <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-3)' }}>{exams.length} total</span>
+            </div>
+            <button onClick={fetchExams} className="btn btn-ghost btn-sm">↻ Refresh</button>
+          </div>
+
+          {loading ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '80px 0', color: 'var(--text-3)' }}>
+              <span className="spinner" style={{ borderColor: '#e2e8f0', borderTopColor: 'var(--blue)' }} /> Loading exams…
+            </div>
+          ) : exams.length === 0 ? (
+            <div className="card" style={{ padding: '64px 24px', textAlign: 'center' }}>
+              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
+                <Inbox size={40} color="var(--text-3)" />
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>No exam papers yet</div>
+              <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Click &quot;Upload Exam&quot; or &quot;Quick Demo&quot; to get started.</div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {exams.map((exam, i) => <ExamCard key={exam.id} exam={exam} role="admin" index={i} />)}
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
