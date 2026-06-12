@@ -36,6 +36,9 @@ export async function POST(request: Request) {
     if (!inv || inv.role !== 'invigilator') {
       return NextResponse.json({ error: 'Invalid Invigilator ID' }, { status: 400 });
     }
+    if (ch.centerId !== inv.centerId) {
+      return NextResponse.json({ error: 'Center Head and Invigilator must belong to the same center' }, { status: 400 });
+    }
 
     // Validate exam time is in the future
     const examDate = new Date(examTime);

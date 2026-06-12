@@ -51,10 +51,10 @@ export default function AdminDashboard() {
     const u = getUser();
     const r = getRole();
     if (!t || r !== 'admin') { router.push('/'); return; }
-    if (u) setUser(u);
+    if (u) setTimeout(() => setUser(u), 0);
 
     authFetch('/api/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {});
-    authFetch('/api/exam/list').then(r => r.json()).then(d => { setExams(d.exams || []); setLoading(false); }).catch(() => setLoading(false));
+    authFetch('/api/exam/list').then(r => r.json()).then(d => { setTimeout(() => { setExams(d.exams || []); setLoading(false); }, 0); }).catch(() => setTimeout(() => setLoading(false), 0));
 
     const iv = setInterval(fetchExams, 30_000);
     return () => clearInterval(iv);
@@ -80,9 +80,9 @@ export default function AdminDashboard() {
   const handleDemo = async () => {
     setDemoLoading(true);
     try {
-      const res = await authFetch('/api/exam/demo', { method: 'POST', body: JSON.stringify({ minutesFromNow: 6 }) });
+      const res = await authFetch('/api/exam/demo', { method: 'POST', body: JSON.stringify({ minutesFromNow: 4 }) });
       const d = await res.json();
-      if (res.ok) { showToast('success', `${d.message} — Login as Center Head & Invigilator within 1 min.`); fetchExams(); }
+      if (res.ok) { showToast('success', d.message); fetchExams(); }
       else showToast('error', d.error);
     } catch { showToast('error', 'Network error.'); }
     finally { setDemoLoading(false); }

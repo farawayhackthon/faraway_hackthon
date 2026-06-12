@@ -4,13 +4,13 @@ export {
   Key,
   Pen,
   Lock,
+  LockOpen,
   Lock as LockShield,
   Eye,
   EyeOff,
   AlertTriangle,
   Calendar,
   Ban,
-  Lock as LockOpen,
   CheckCircle,
   FileText as Document,
   Clipboard,
@@ -26,6 +26,8 @@ export {
   Download,
   Printer,
   Bell,
+  ScanFace,
+  Camera,
 } from 'lucide-react';
 
 // Clock is also used as AlarmClock in some components

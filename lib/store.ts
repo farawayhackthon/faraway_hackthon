@@ -20,6 +20,8 @@ export interface User {
   role: 'admin' | 'center_head' | 'invigilator';
   name: string;
   centerId?: string;
+  faceDescriptor?: number[]; // 128-dim face embedding for biometric verification
+  faceEnrolledAt?: string;
 }
 
 export interface ExamRecord {
@@ -34,7 +36,7 @@ export interface ExamRecord {
   encryptedKey: string;     // The AES key is itself encrypted and stored separately
   keySalt: string;
   uploadedAt: string;
-  status: 'scheduled' | 'window_open' | 'decrypted' | 'expired';
+  status: 'scheduled' | 'window_open' | 'ready_to_decrypt' | 'decrypted' | 'expired';
   signatures: {
     centerHead: boolean;
     centerHeadAt?: string;
@@ -136,22 +138,34 @@ class MockStore {
   }
 
   // Users
-  getUsers(): User[] { return this.data.users; }
-  getUserById(id: string): User | undefined { return this.data.users.find(u => u.id === id); }
+  getUsers(): User[] { this.data = this.load(); return this.data.users; }
+  getUserById(id: string): User | undefined { this.data = this.load(); return this.data.users.find(u => u.id === id); }
   getUserByUsername(username: string): User | undefined {
+    this.data = this.load();
     return this.data.users.find(u => u.username === username);
   }
 
+  updateUser(id: string, updates: Partial<User>): User | null {
+    this.data = this.load();
+    const idx = this.data.users.findIndex(u => u.id === id);
+    if (idx === -1) return null;
+    this.data.users[idx] = { ...this.data.users[idx], ...updates };
+    this.save();
+    return this.data.users[idx];
+  }
+
   // Exams
-  getExams(): ExamRecord[] { return this.data.exams; }
-  getExamById(id: string): ExamRecord | undefined { return this.data.exams.find(e => e.id === id); }
+  getExams(): ExamRecord[] { this.data = this.load(); return this.data.exams; }
+  getExamById(id: string): ExamRecord | undefined { this.data = this.load(); return this.data.exams.find(e => e.id === id); }
 
   addExam(exam: ExamRecord): void {
+    this.data = this.load();
     this.data.exams.push(exam);
     this.save();
   }
 
   updateExam(id: string, updates: Partial<ExamRecord>): ExamRecord | null {
+    this.data = this.load();
     const idx = this.data.exams.findIndex(e => e.id === id);
     if (idx === -1) return null;
     this.data.exams[idx] = { ...this.data.exams[idx], ...updates };
@@ -163,6 +177,7 @@ class MockStore {
    * Get exams visible to a given user (center head or invigilator sees only their assigned exams)
    */
   getExamsForUser(userId: string, role: string): ExamRecord[] {
+    this.data = this.load();
     if (role === 'admin') return this.data.exams;
     if (role === 'center_head') {
       return this.data.exams.filter(e => e.centerHeadId === userId);
@@ -190,9 +205,11 @@ class MockStore {
     const windowOpen = diffMin <= 5 && diffMin >= -30; // window: 5 min before to 30 min after
     const expired = diffMin < -30;
 
+    const bothSigned = exam.signatures.centerHead && exam.signatures.invigilator;
     let status = exam.status;
     if (expired) status = 'expired';
-    else if (windowOpen && exam.signatures.centerHead && exam.signatures.invigilator) status = 'decrypted';
+    else if (exam.decryptedContent) status = 'decrypted';
+    else if (windowOpen && bothSigned) status = 'ready_to_decrypt';
     else if (windowOpen) status = 'window_open';
     else status = 'scheduled';
 
@@ -201,21 +218,25 @@ class MockStore {
 
   // Notifications
   addNotification(notification: NotificationRecord): void {
+    this.data = this.load();
     this.data.notifications.unshift(notification);
     this.save();
   }
 
   getNotificationsForUser(userId: string): NotificationRecord[] {
+    this.data = this.load();
     return this.data.notifications
       .filter(n => n.userId === userId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
   getUnreadNotificationCount(userId: string): number {
+    this.data = this.load();
     return this.data.notifications.filter(n => n.userId === userId && !n.read).length;
   }
 
   markNotificationRead(id: string, userId: string): boolean {
+    this.data = this.load();
     const notification = this.data.notifications.find(n => n.id === id && n.userId === userId);
     if (!notification || notification.read) return false;
     notification.read = true;
@@ -224,6 +245,7 @@ class MockStore {
   }
 
   markAllNotificationsRead(userId: string): void {
+    this.data = this.load();
     let changed = false;
     for (const notification of this.data.notifications) {
       if (notification.userId === userId && !notification.read) {
@@ -232,6 +254,31 @@ class MockStore {
       }
     }
     if (changed) this.save();
+  }
+
+  /** Remove expired demo exams to keep the store usable for live testing */
+  pruneExpiredDemoExams(): number {
+    this.data = this.load();
+    const before = this.data.exams.length;
+    const expiredIds = new Set<string>();
+
+    this.data.exams = this.data.exams.filter(exam => {
+      if (!exam.title.startsWith('[DEMO]')) return true;
+      if (this.computeExamStatus(exam).expired) {
+        expiredIds.add(exam.id);
+        return false;
+      }
+      return true;
+    });
+
+    if (expiredIds.size > 0) {
+      this.data.notifications = this.data.notifications.filter(n => !expiredIds.has(n.examId));
+      this.save();
+    } else if (this.data.exams.length !== before) {
+      this.save();
+    }
+
+    return before - this.data.exams.length;
   }
 
   reset(): void {

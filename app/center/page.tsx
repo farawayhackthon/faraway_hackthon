@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import CountdownTimer from '@/components/CountdownTimer';
 import SignaturePanel from '@/components/SignaturePanel';
-import { Key, Pen, Zap, CheckCircle, Ban, Clock, Inbox, ArrowLeft, Document, Clipboard, LockOpen, AlertTriangle, XCircle, Download, Printer } from '@/components/Icons';
+import FaceVerificationModal from '@/components/FaceVerificationModal';
+import { Key, Pen, Zap, CheckCircle, Ban, Clock, Inbox, ArrowLeft, Document, Clipboard, LockOpen, AlertTriangle, XCircle, Download, Printer, ScanFace } from '@/components/Icons';
 import { getRole, getToken, getUser } from '@/lib/auth-storage';
 import ExamFilterTabs from '@/components/ExamFilterTabs';
 
@@ -49,6 +50,7 @@ function escapeHtml(text: string) {
 
 export default function CenterPage() {
   const router = useRouter();
+  const paperSectionRef = useRef<HTMLDivElement>(null);
   const paperRef = useRef<HTMLDivElement>(null);
   const [user, setUser] = useState<UserInfo | null>(null);
   const [exams, setExams] = useState<Exam[]>([]);
@@ -60,6 +62,11 @@ export default function CenterPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
   const [auditLog, setAuditLog] = useState<Record<string, string> | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [faceEnrolled, setFaceEnrolled] = useState(false);
+  const [faceModalOpen, setFaceModalOpen] = useState(false);
+  const [faceModalMode, setFaceModalMode] = useState<'enroll' | 'verify'>('enroll');
+  const [pendingDecryptExamId, setPendingDecryptExamId] = useState<string | null>(null);
+  const selectedExamIdRef = useRef<string | null>(null);
 
   const authFetch = useCallback(async (url: string, options?: RequestInit) => {
     const t = getToken();
@@ -73,20 +80,46 @@ export default function CenterPage() {
     });
   }, []);
 
+  const fetchFaceStatus = useCallback(async () => {
+    try {
+      const res = await authFetch('/api/user/face');
+      if (res.ok) {
+        const data = await res.json();
+        setFaceEnrolled(Boolean(data.enrolled));
+      }
+    } catch (e) { console.error(e); }
+  }, [authFetch]);
+
+  useEffect(() => {
+    selectedExamIdRef.current = selectedExam?.id ?? null;
+  }, [selectedExam?.id]);
+
   const fetchExams = useCallback(async () => {
     try {
       const res = await authFetch('/api/exam/list');
-      if (res.ok) {
-        const data = await res.json();
-        setExams(data.exams || []);
-        // Update selected exam if viewing one
-        if (selectedExam) {
-          const updated = data.exams.find((e: Exam) => e.id === selectedExam.id);
-          if (updated) setSelectedExam(updated);
-        }
+      if (!res.ok) return;
+      const data = await res.json();
+      const nextExams: Exam[] = data.exams || [];
+      setExams(nextExams);
+
+      const selectedId = selectedExamIdRef.current;
+      if (!selectedId) return;
+
+      const updated = nextExams.find((e: Exam) => e.id === selectedId);
+      if (!updated) return;
+
+      setSelectedExam(prev => {
+        if (!prev || prev.id !== selectedId) return updated;
+        return {
+          ...updated,
+          decryptedContent: updated.decryptedContent ?? prev.decryptedContent,
+        };
+      });
+      if (updated.decryptedContent) {
+        setDecryptedContent(updated.decryptedContent);
       }
     } catch (e) { console.error(e); }
-  }, [authFetch, selectedExam]);
+  }, [authFetch]);
 
   useEffect(() => {
     const t = getToken();
@@ -96,16 +129,38 @@ export default function CenterPage() {
       router.push('/');
       return;
     }
-    setUser(parsedUser);
+    setTimeout(() => setUser(parsedUser), 0);
 
     authFetch('/api/exam/list')
       .then(r => r.json())
-      .then(d => { setExams(d.exams || []); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(d => setTimeout(() => { setExams(d.exams || []); setLoading(false); }, 0))
+      .catch(() => setTimeout(() => setLoading(false), 0));
 
-    const interval = setInterval(fetchExams, 15000); // Poll every 15s
+    setTimeout(() => fetchFaceStatus(), 0);
+  }, [router, authFetch, fetchFaceStatus]);
+
+  useEffect(() => {
+    const interval = setInterval(fetchExams, 5000);
     return () => clearInterval(interval);
-  }, [router, authFetch, fetchExams]);
+  }, [fetchExams]);
+
+  const openFaceVerification = useCallback(async (examId: string) => {
+    try {
+      const res = await authFetch('/api/user/face');
+      if (res.ok) {
+        const data = await res.json();
+        const enrolled = Boolean(data.enrolled);
+        setFaceEnrolled(enrolled);
+        setPendingDecryptExamId(examId);
+        setFaceModalMode(enrolled ? 'verify' : 'enroll');
+        setFaceModalOpen(true);
+        return;
+      }
+    } catch (e) { console.error(e); }
+    setPendingDecryptExamId(examId);
+    setFaceModalMode(faceEnrolled ? 'verify' : 'enroll');
+    setFaceModalOpen(true);
+  }, [authFetch, faceEnrolled]);
 
   const handleSign = async (examId: string) => {
     setSigningId(examId);
@@ -118,11 +173,21 @@ export default function CenterPage() {
       const data = await res.json();
 
       if (res.ok) {
-        setMessage({ type: 'success', text: data.message });
+        const bothSigned = data.bothSigned;
+        setMessage({
+          type: 'success',
+          text: bothSigned
+            ? 'Both signatures collected. Please verify your face to release the exam paper.'
+            : data.message,
+        });
         await fetchExams();
-        // Update selected exam
-        const updated = exams.find(e => e.id === examId);
-        if (updated) setSelectedExam({ ...updated, signatures: data.signatures });
+        setSelectedExam(prev => prev?.id === examId
+          ? { ...prev, signatures: data.signatures, status: bothSigned ? 'ready_to_decrypt' : prev.status }
+          : prev);
+
+        if (bothSigned) {
+          openFaceVerification(examId);
+        }
       } else {
         setMessage({ type: data.locked ? 'warning' : 'error', text: data.error });
       }
@@ -134,13 +199,27 @@ export default function CenterPage() {
   };
 
   const handleDecrypt = async (examId: string) => {
+    const exam = exams.find(e => e.id === examId) ?? (selectedExam?.id === examId ? selectedExam : null);
+    if (exam?.decryptedContent) {
+      setDecryptedContent(exam.decryptedContent);
+      setSelectedExam(prev => prev?.id === examId ? { ...prev, ...exam, status: 'decrypted' } : prev);
+      setMessage({ type: 'success', text: 'Exam paper is already decrypted. Scroll down to view.' });
+      setTimeout(() => paperSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
+      return;
+    }
+    await openFaceVerification(examId);
+  };
+
+  const performDecrypt = async (examId: string, faceVerificationToken?: string) => {
     setDecryptingId(examId);
     setMessage(null);
-    setDecryptedContent(null);
     try {
       const res = await authFetch('/api/exam/decrypt', {
         method: 'POST',
-        body: JSON.stringify({ examId }),
+        body: JSON.stringify({
+          examId,
+          ...(faceVerificationToken ? { faceVerificationToken } : {}),
+        }),
       });
       const data = await res.json();
 
@@ -150,8 +229,9 @@ export default function CenterPage() {
         setSelectedExam(prev => prev?.id === examId
           ? { ...prev, decryptedContent: data.content, status: 'decrypted' }
           : prev);
-        setMessage({ type: 'success', text: 'Exam paper decrypted successfully! All security conditions verified.' });
+        setMessage({ type: 'success', text: 'Exam paper released! Scroll down to view the decrypted paper.' });
         await fetchExams();
+        setTimeout(() => paperSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
       } else {
         setMessage({
           type: data.locked ? 'warning' : 'error',
@@ -162,6 +242,7 @@ export default function CenterPage() {
       setMessage({ type: 'error', text: 'Decryption failed. Please try again.' });
     } finally {
       setDecryptingId(null);
+      setPendingDecryptExamId(null);
     }
   };
 
@@ -207,6 +288,7 @@ export default function CenterPage() {
 
     try {
       const html2pdfModule = await import('html2pdf.js');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const html2pdf = (html2pdfModule as any).default || html2pdfModule;
 
       const wrapper = document.createElement('div');
@@ -356,11 +438,12 @@ export default function CenterPage() {
   const canDecrypt = (exam: Exam) =>
     exam.windowOpen && !exam.expired &&
     exam.signatures.centerHead && exam.signatures.invigilator &&
-    exam.status !== 'decrypted';
+    !exam.decryptedContent && exam.status !== 'decrypted';
 
   const statusBadgeClass = (status: string) => {
     switch (status) {
       case 'window_open': return 'badge badge-amber';
+      case 'ready_to_decrypt': return 'badge badge-amber';
       case 'decrypted':   return 'badge badge-green';
       case 'expired':     return 'badge badge-red';
       default:            return 'badge badge-gray';
@@ -370,6 +453,7 @@ export default function CenterPage() {
   const statusLabel = (status: string) => {
     switch (status) {
       case 'window_open': return 'Window Open';
+      case 'ready_to_decrypt': return 'Awaiting Face Verify';
       case 'decrypted':   return 'Decrypted';
       case 'expired':     return 'Expired';
       default:            return 'Scheduled';
@@ -379,6 +463,7 @@ export default function CenterPage() {
   const statusIcon = (status: string) => {
     switch (status) {
       case 'window_open': return <Zap size={14} />;
+      case 'ready_to_decrypt': return <ScanFace size={14} />;
       case 'decrypted':   return <CheckCircle size={14} />;
       case 'expired':     return <Ban size={14} />;
       default:            return <Clock size={14} />;
@@ -388,6 +473,7 @@ export default function CenterPage() {
   const statusDotColor = (status: string) => {
     switch (status) {
       case 'window_open': return '#d97706';
+      case 'ready_to_decrypt': return '#2563eb';
       case 'decrypted':   return '#16a34a';
       case 'expired':     return '#dc2626';
       default:            return '#64748b';
@@ -406,7 +492,7 @@ export default function CenterPage() {
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
 
         {/* Page Header */}
-        <div className="anim-fade-up" style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 32 }}>
+        <div className="anim-fade-up" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: myRole === 'center_head' ? '#eef2f7' : '#ecfdf5', border: `1px solid ${myRole === 'center_head' ? '#d5dae2' : 'rgba(22,163,74,0.15)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               {myRole === 'center_head' ? <Key size={20} color="var(--navy)" /> : <Pen size={20} color="#16a34a" />}
@@ -421,6 +507,57 @@ export default function CenterPage() {
                   : 'Provide Signature 2 to complete multi-signature exam decryption'}
               </p>
             </div>
+          </div>
+        </div>
+
+        {/* Face Enrollment Card */}
+        <div className="anim-fade-up" style={{ marginBottom: 24 }}>
+          <div
+            className="card"
+            style={{
+              padding: '16px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 16,
+              border: faceEnrolled ? '1px solid rgba(22,163,74,0.15)' : '1px solid rgba(234,179,8,0.3)',
+              background: faceEnrolled ? 'rgba(22,163,74,0.03)' : 'rgba(234,179,8,0.03)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: 10,
+                background: faceEnrolled ? '#f0fdf4' : '#fffbeb',
+                border: `1px solid ${faceEnrolled ? 'rgba(22,163,74,0.15)' : 'rgba(234,179,8,0.2)'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <ScanFace size={18} color={faceEnrolled ? '#16a34a' : '#d97706'} />
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 2 }}>
+                  {faceEnrolled ? 'Face Profile Registered' : 'Face Registration Required'}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.4 }}>
+                  {faceEnrolled
+                    ? 'Your face is enrolled for biometric verification. You can re-enroll anytime.'
+                    : 'Register your face now to avoid delays during exam decryption.'}
+                </div>
+              </div>
+            </div>
+            <button
+              id="btn-face-enroll"
+              type="button"
+              className={faceEnrolled ? 'btn' : 'btn btn-primary'}
+              style={{ height: 38, fontSize: 12, padding: '0 16px', whiteSpace: 'nowrap', flexShrink: 0 }}
+              onClick={() => {
+                setFaceModalMode('enroll');
+                setPendingDecryptExamId(null);
+                setFaceModalOpen(true);
+              }}
+            >
+              <ScanFace size={14} />
+              &nbsp;{faceEnrolled ? 'Re-enroll Face' : 'Register Face Now'}
+            </button>
           </div>
         </div>
 
@@ -466,8 +603,10 @@ export default function CenterPage() {
                 <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>
                   {showHistory ? 'No expired exams' : 'No active exams'}
                 </div>
-                <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
-                  {showHistory ? 'Expired exams will appear here.' : 'Active exams will appear here.'}
+                <div style={{ fontSize: 13, color: 'var(--text-3)', lineHeight: 1.6 }}>
+                  {showHistory
+                    ? 'Expired exams will appear here.'
+                    : 'Ask the Exam Board admin to click "Create Live Demo Exam" on the admin dashboard. Then both Center Head and Invigilator must sign, verify face, and release the paper.'}
                 </div>
               </div>
             ) : (
@@ -480,9 +619,12 @@ export default function CenterPage() {
                       key={exam.id}
                       onClick={() => {
                         setSelectedExam(exam);
-                        setDecryptedContent(exam.decryptedContent || null);
+                        setDecryptedContent(exam.decryptedContent ?? null);
                         setMessage(null);
                         setAuditLog(null);
+                        if (exam.decryptedContent) {
+                          setTimeout(() => paperSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
+                        }
                       }}
                       className={`exam-list-item ${isSelected ? 'card-selected' : ''}`}
                       style={{ display: 'block' }}
@@ -557,7 +699,10 @@ export default function CenterPage() {
                 </div>
 
                 {/* Countdown */}
-                <CountdownTimer examTime={selectedExam.examTime} />
+                <CountdownTimer
+                  examTime={selectedExam.examTime}
+                  decrypted={selectedExam.status === 'decrypted' || Boolean(decryptedContent || selectedExam.decryptedContent)}
+                />
 
                 {/* Signature Panel */}
                 <SignaturePanel
@@ -571,16 +716,34 @@ export default function CenterPage() {
                   onDecrypt={() => handleDecrypt(selectedExam.id)}
                 />
 
-                {/* Decrypted Paper */}
+                {/* Waiting for face verification */}
+                {canDecrypt(selectedExam) && !decryptedContent && !selectedExam.decryptedContent && (
+                  <div className="card" style={{ padding: 32, textAlign: 'center', borderStyle: 'dashed' }}>
+                    <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
+                      <ScanFace size={40} color="var(--text-3)" />
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>
+                      Exam paper locked
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--text-3)', maxWidth: 360, margin: '0 auto 16px' }}>
+                      Both signatures are complete. Click &quot;Verify Face &amp; Release Exam Paper&quot; above — the decrypted paper will appear here.
+                    </div>
+                    <button type="button" onClick={() => handleDecrypt(selectedExam.id)} className="btn btn-primary" style={{ height: 40, fontSize: 13 }}>
+                      <ScanFace size={14} /> Verify Face Now
+                    </button>
+                  </div>
+                )}
+
+                {/* Decrypted Paper — appears below after face verification */}
                 {(decryptedContent || selectedExam.decryptedContent) && (
-                  <div className="card card-glow-green anim-fade-up" style={{ padding: 24 }}>
+                  <div ref={paperSectionRef} className="card card-glow-green anim-fade-up" style={{ padding: 24 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 20 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <div style={{ width: 36, height: 36, borderRadius: 8, background: '#f0fdf4', border: '1px solid rgba(22,163,74,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <Document size={18} color="#16a34a" />
+                          <LockOpen size={18} color="#16a34a" />
                         </div>
                         <div>
-                          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>Exam Paper — Decrypted</h3>
+                          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>Exam Paper — Unlocked</h3>
                           <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
                             {selectedExam.originalFilename} · For official use only
                           </p>
@@ -653,6 +816,7 @@ export default function CenterPage() {
                           <span>Audit Trail:</span>
                           {auditLog.centerHeadSignedAt && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Key size={12} /> CH Signed: {new Date(auditLog.centerHeadSignedAt).toLocaleString()}</span>}
                           {auditLog.invigilatorSignedAt && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Pen size={12} /> Inv Signed: {new Date(auditLog.invigilatorSignedAt).toLocaleString()}</span>}
+                          {auditLog.faceVerifiedAt && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><ScanFace size={12} /> Face Verified ({auditLog.faceVerifiedUser}): {new Date(auditLog.faceVerifiedAt).toLocaleString()}</span>}
                           {auditLog.decryptedAt && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><LockOpen size={12} /> Decrypted: {new Date(auditLog.decryptedAt).toLocaleString()}</span>}
                         </div>
                       </div>
@@ -665,6 +829,7 @@ export default function CenterPage() {
                           return <iframe src={content} width="100%" height="800px" style={{ border: 'none', display: 'block' }} title="Exam Paper PDF" />;
                         }
                         if (isImageContent(content)) {
+                          // eslint-disable-next-line @next/next/no-img-element
                           return <img src={content} alt="Exam Paper" style={{ maxWidth: '100%', display: 'block', margin: '0 auto' }} />;
                         }
                         if (isDataUrl(content)) {
@@ -686,6 +851,38 @@ export default function CenterPage() {
           </div>
         </div>
       </main>
+
+      <FaceVerificationModal
+        open={faceModalOpen}
+        mode={faceModalMode}
+        examId={pendingDecryptExamId ?? undefined}
+        userName={user?.name ?? 'Staff'}
+        authFetch={authFetch}
+        onClose={() => {
+          setFaceModalOpen(false);
+          setPendingDecryptExamId(null);
+        }}
+        onEnrolled={() => {
+          setFaceEnrolled(true);
+          fetchFaceStatus();
+          if (pendingDecryptExamId) {
+            // Close modal, then reopen in verify mode so camera reinitializes
+            setFaceModalOpen(false);
+            setMessage({ type: 'success', text: 'Face enrolled! Now verify your identity to release the exam paper.' });
+            setTimeout(() => {
+              setFaceModalMode('verify');
+              setFaceModalOpen(true);
+            }, 600);
+          } else {
+            setFaceModalOpen(false);
+            setMessage({ type: 'success', text: 'Face profile registered successfully. You\'re ready for biometric verification.' });
+          }
+        }}
+        onVerified={(token) => {
+          setFaceModalOpen(false);
+          if (pendingDecryptExamId) performDecrypt(pendingDecryptExamId, token);
+        }}
+      />
     </div>
   );
 }

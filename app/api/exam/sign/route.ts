@@ -32,6 +32,10 @@ export async function POST(request: Request) {
     // ─── Time-Lock Check ──────────────────────────────────────────────────────
     const computed = store.computeExamStatus(exam);
 
+    if (computed.expired) {
+      return NextResponse.json({ error: 'Exam period has expired' }, { status: 403 });
+    }
+
     if (!computed.windowOpen) {
       const minutesLeft = Math.ceil(computed.minutesUntilExam - 5);
       return NextResponse.json({
@@ -39,10 +43,6 @@ export async function POST(request: Request) {
         minutesUntilWindow: minutesLeft,
         locked: true,
       }, { status: 403 });
-    }
-
-    if (computed.expired) {
-      return NextResponse.json({ error: 'Exam period has expired' }, { status: 403 });
     }
 
     // ─── Role-Based Signature ─────────────────────────────────────────────────

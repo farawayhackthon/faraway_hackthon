@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getStore } from '@/lib/store';
 import { verifyToken } from '@/lib/jwt';
 import { decrypt } from '@/lib/crypto';
+import { verifyFaceVerificationToken } from '@/lib/face';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(request: Request) {
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { examId } = body;
+    const { examId, faceVerificationToken } = body;
 
     if (!examId) {
       return NextResponse.json({ error: 'Exam ID is required' }, { status: 400 });
@@ -45,6 +46,13 @@ export async function POST(request: Request) {
     // ─── GATE 1: Time-Lock Check ──────────────────────────────────────────────
     const computed = store.computeExamStatus(exam);
 
+    if (computed.expired) {
+      return NextResponse.json({
+        error: 'Decryption window has expired. Contact the Exam Board.',
+        gate: 'EXPIRED',
+      }, { status: 403 });
+    }
+
     if (!computed.windowOpen) {
       const minutesLeft = Math.ceil(computed.minutesUntilExam - 5);
       return NextResponse.json({
@@ -52,13 +60,6 @@ export async function POST(request: Request) {
         minutesUntilWindow: minutesLeft,
         locked: true,
         gate: 'TIME_LOCK',
-      }, { status: 403 });
-    }
-
-    if (computed.expired) {
-      return NextResponse.json({
-        error: 'Decryption window has expired. Contact the Exam Board.',
-        gate: 'EXPIRED',
       }, { status: 403 });
     }
 
@@ -79,13 +80,44 @@ export async function POST(request: Request) {
       }, { status: 403 });
     }
 
-    // ─── GATE 3: Already decrypted? Return cached ─────────────────────────────
+
+
+    // ─── GATE 3: Face Verification (required for first release only) ──────────
+    const user = store.getUserById(payload.userId);
+    if (!user?.faceDescriptor?.length) {
+      return NextResponse.json({
+        error: 'FACE NOT ENROLLED: Register your face profile before decrypting exam papers.',
+        gate: 'FACE_NOT_ENROLLED',
+      }, { status: 403 });
+    }
+
+    if (!faceVerificationToken) {
+      return NextResponse.json({
+        error: 'FACE VERIFICATION REQUIRED: Live face recognition must pass before decryption.',
+        gate: 'FACE_REQUIRED',
+      }, { status: 403 });
+    }
+
+    const facePayload = verifyFaceVerificationToken(faceVerificationToken, payload.userId, examId);
+    if (!facePayload) {
+      return NextResponse.json({
+        error: 'FACE VERIFICATION EXPIRED: Please verify your identity again.',
+        gate: 'FACE_TOKEN_INVALID',
+      }, { status: 403 });
+    }
+
+    // ─── Already decrypted? Return cached (requires face verification) ────────
     if (exam.decryptedContent) {
       return NextResponse.json({
         success: true,
         content: exam.decryptedContent,
         alreadyCached: true,
         decryptedAt: exam.signatures.invigilatorAt ?? exam.signatures.centerHeadAt,
+        auditLog: {
+          centerHeadSignedAt: exam.signatures.centerHeadAt,
+          invigilatorSignedAt: exam.signatures.invigilatorAt,
+          decryptedAt: exam.signatures.invigilatorAt ?? exam.signatures.centerHeadAt,
+        },
       });
     }
 
@@ -130,6 +162,8 @@ export async function POST(request: Request) {
         auditLog: {
           centerHeadSignedAt: exam.signatures.centerHeadAt,
           invigilatorSignedAt: exam.signatures.invigilatorAt,
+          faceVerifiedAt: new Date().toISOString(),
+          faceVerifiedUser: decryptor?.name ?? 'Unknown',
           decryptedAt: new Date().toISOString(),
         },
       });

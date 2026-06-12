@@ -42,8 +42,7 @@ export async function GET(request: Request) {
         invigilatorName: inv?.name ?? 'Unknown',
         uploadedByName: uploader?.name ?? 'Unknown',
         originalFilename: exam.originalFilename,
-        // Only include decrypted content if fully unlocked
-        decryptedContent: computed.status === 'decrypted' ? exam.decryptedContent : undefined,
+        // Removed decryptedContent to prevent bypassing face verification
       };
     });
 

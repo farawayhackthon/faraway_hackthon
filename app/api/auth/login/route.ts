@@ -42,6 +42,7 @@ export async function POST(request: Request) {
         role: user.role,
         name: user.name,
         centerId: user.centerId,
+        faceEnrolled: Boolean(user.faceDescriptor?.length),
       },
     });
   } catch (err) {

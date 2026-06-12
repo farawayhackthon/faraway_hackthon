@@ -48,7 +48,7 @@ html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
 body {
   background: var(--bg);
   color: var(--text-1);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
   font-size: 16px;
   line-height: 1.5;
   min-height: 100vh;
@@ -502,7 +502,7 @@ select.input { cursor: pointer; appearance: none; background-image: url("data:im
 
 /* ─── Countdown ───────────────────────────────────────────────────────────── */
 .countdown-digits {
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: var(--font-jetbrains-mono), 'SF Mono', monospace;
   font-size: 36px;
   font-weight: 500;
   line-height: 1;
@@ -514,7 +514,7 @@ select.input { cursor: pointer; appearance: none; background-image: url("data:im
 }
 
 .countdown-digits-amber {
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: var(--font-jetbrains-mono), 'SF Mono', monospace;
   font-size: 36px;
   font-weight: 500;
   line-height: 1;
@@ -618,7 +618,7 @@ select.input { cursor: pointer; appearance: none; background-image: url("data:im
 .role-card-active { border-color: rgba(59,130,246,0.45) !important; background: rgba(59,130,246,0.06) !important; box-shadow: 0 0 0 1px rgba(59,130,246,0.1); }
 
 /* ─── Mono ────────────────────────────────────────────────────────────────── */
-.mono { font-family: 'JetBrains Mono', 'SF Mono', monospace; }
+.mono { font-family: var(--font-jetbrains-mono), 'SF Mono', monospace; }
 
 /* ─── Stat card ───────────────────────────────────────────────────────────── */
 .stat-card {
@@ -754,7 +754,7 @@ select.input { cursor: pointer; appearance: none; background-image: url("data:im
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--text-1);
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: var(--font-jetbrains-mono), 'SF Mono', monospace;
 }
 
 /* ─── Toast animation ─────────────────────────────────────────────────────── */

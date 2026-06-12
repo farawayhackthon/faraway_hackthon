@@ -4,15 +4,16 @@ import { Calendar, Ban, LockOpen, Lock } from '@/components/Icons';
 
 interface CountdownTimerProps {
   examTime: string;
+  decrypted?: boolean;
 }
 
 function pad(n: number) { return String(n).padStart(2, '0'); }
 
-export default function CountdownTimer({ examTime }: CountdownTimerProps) {
+export default function CountdownTimer({ examTime, decrypted = false }: CountdownTimerProps) {
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
-    setNow(new Date());
+    setTimeout(() => setNow(new Date()), 0);
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
@@ -43,7 +44,12 @@ export default function CountdownTimer({ examTime }: CountdownTimerProps) {
   let statusColor = 'var(--text-3)';
   let statusBg = '#f8fafc';
   let statusBorder = 'var(--border)';
-  if (isExpired) {
+  if (decrypted) {
+    statusLabel = 'Paper released — lock open';
+    statusColor = 'var(--green)';
+    statusBg = '#f0fdf4';
+    statusBorder = 'rgba(22,163,74,0.2)';
+  } else if (isExpired) {
     statusLabel = 'Exam window expired';
     statusColor = 'var(--red)';
     statusBg = '#fef2f2';
@@ -100,11 +106,13 @@ export default function CountdownTimer({ examTime }: CountdownTimerProps) {
               display: 'flex',
               justifyContent: 'center',
             }}>
-              {isExpired
-                ? <Ban size={32} color="var(--red)" />
-                : isWindow
-                  ? <LockOpen size={32} color="var(--amber)" />
-                  : <Lock size={32} color="var(--text-3)" />
+              {decrypted
+                ? <LockOpen size={32} color="var(--green)" />
+                : isExpired
+                  ? <Ban size={32} color="var(--red)" />
+                  : isWindow
+                    ? <LockOpen size={32} color="var(--amber)" />
+                    : <Lock size={32} color="var(--text-3)" />
               }
             </div>
             <div style={{

@@ -69,7 +69,7 @@ export default function NotificationBell({ onNewNotification, variant = 'light',
   }, [authFetch, onNewNotification]);
 
   useEffect(() => {
-    fetchNotifications();
+    setTimeout(() => fetchNotifications(), 0);
     const interval = setInterval(fetchNotifications, 15000);
     return () => clearInterval(interval);
   }, [fetchNotifications]);

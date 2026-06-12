@@ -13,6 +13,7 @@ interface Exam {
 const STATUS: Record<string, { label: string; badge: string; dot: string }> = {
   scheduled:   { label: 'Scheduled',   badge: 'badge-gray',  dot: '#475569' },
   window_open: { label: 'Window Open', badge: 'badge-amber', dot: '#d97706' },
+  ready_to_decrypt: { label: 'Awaiting Face', badge: 'badge-amber', dot: '#2563eb' },
   decrypted:   { label: 'Decrypted',   badge: 'badge-green', dot: '#16a34a' },
   expired:     { label: 'Expired',     badge: 'badge-red',   dot: '#dc2626' },
 };

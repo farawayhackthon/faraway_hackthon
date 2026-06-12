@@ -23,14 +23,26 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const minutesFromNow = body.minutesFromNow ?? 6; // default: 6 min (window opens in 1 min)
+    const minutesFromNow = body.minutesFromNow ?? 4; // default: 4 min (signing window open immediately)
 
     const store = getStore();
-    const ch = store.getUsers().find(u => u.role === 'center_head');
-    const inv = store.getUsers().find(u => u.role === 'invigilator');
+    const pruned = store.pruneExpiredDemoExams();
+    const users = store.getUsers();
+    const centerHeads = users.filter(u => u.role === 'center_head');
+    const invigilators = users.filter(u => u.role === 'invigilator');
+
+    let ch, inv;
+    for (const head of centerHeads) {
+      const matchingInv = invigilators.find(i => i.centerId === head.centerId);
+      if (matchingInv) {
+        ch = head;
+        inv = matchingInv;
+        break;
+      }
+    }
 
     if (!ch || !inv) {
-      return NextResponse.json({ error: 'No Center Head or Invigilator found' }, { status: 400 });
+      return NextResponse.json({ error: 'Could not find a Center Head and Invigilator from the same center. Please assign them properly first.' }, { status: 400 });
     }
 
     const examTime = new Date(Date.now() + minutesFromNow * 60 * 1000);
@@ -126,7 +138,8 @@ Do not turn over until instructed by the invigilator.`;
       examTime: examTime.toISOString(),
       minutesFromNow,
       windowOpensInMinutes: minutesFromNow - 5,
-      message: `Demo exam created! Exam time: T+${minutesFromNow}min. Window opens in ${minutesFromNow - 5} minute(s).`,
+      prunedExpiredDemos: pruned,
+      message: `Demo exam created! Signing window is ${minutesFromNow <= 5 ? 'open now' : `open in ${minutesFromNow - 5} minute(s)`}. Login as Center Head & Invigilator to sign, verify face, and release the paper.`,
     });
   } catch (err) {
     console.error('Demo exam error:', err);
