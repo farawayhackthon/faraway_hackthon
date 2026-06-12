@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getStore } from '@/lib/store';
 import { verifyToken } from '@/lib/jwt';
 import { decrypt } from '@/lib/crypto';
+import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(request: Request) {
   try {
@@ -101,6 +102,22 @@ export async function POST(request: Request) {
       store.updateExam(examId, {
         decryptedContent,
         status: 'decrypted',
+      });
+
+      const decryptor = store.getUserById(payload.userId);
+      const roleLabel = payload.role === 'center_head' ? 'Center Head' : 'Invigilator';
+      store.addNotification({
+        id: uuidv4(),
+        userId: exam.uploadedBy,
+        type: 'exam_decrypted',
+        examId: exam.id,
+        examTitle: exam.title,
+        subject: exam.subject,
+        decryptedBy: decryptor?.name ?? 'Unknown',
+        decryptedByRole: roleLabel,
+        message: `"${exam.title}" was decrypted by ${decryptor?.name ?? 'center staff'} (${roleLabel}).`,
+        createdAt: new Date().toISOString(),
+        read: false,
       });
 
       console.log(`[DECRYPT SUCCESS] Exam "${exam.title}" decrypted. Time: ${new Date().toISOString()}`);

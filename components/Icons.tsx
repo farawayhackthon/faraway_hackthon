@@ -25,6 +25,7 @@ export {
   Upload,
   Download,
   Printer,
+  Bell,
 } from 'lucide-react';
 
 // Clock is also used as AlarmClock in some components

@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import ExamCard from '@/components/ExamCard';
 import { Clipboard, Clock, Zap, CheckCircle, XCircle, Flask, LockShield, Inbox, Upload } from '@/components/Icons';
+import { getRole, getToken, getUser } from '@/lib/auth-storage';
+import ExamFilterTabs from '@/components/ExamFilterTabs';
 
 interface User { id: string; name: string; role: string; username: string; }
 interface Exam {
@@ -26,16 +28,16 @@ export default function AdminDashboard() {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [showHistory, setShowHistory] = useState(false);
 
-  const showToast = (type: 'success' | 'error', text: string) => {
+  const showToast = (type: 'success' | 'error' | 'info', text: string) => {
     setToast({ type, text });
     setTimeout(() => setToast(null), 5000);
   };
 
   const authFetch = useCallback((url: string, opts?: RequestInit) => {
-    const t = localStorage.getItem('token') || '';
+    const t = getToken();
     return fetch(url, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}`, ...opts?.headers } });
   }, []);
 
@@ -45,11 +47,11 @@ export default function AdminDashboard() {
   }, [authFetch]);
 
   useEffect(() => {
-    const t = localStorage.getItem('token');
-    const u = localStorage.getItem('user');
-    const r = localStorage.getItem('role');
+    const t = getToken();
+    const u = getUser();
+    const r = getRole();
     if (!t || r !== 'admin') { router.push('/'); return; }
-    if (u) setUser(JSON.parse(u));
+    if (u) setUser(u);
 
     authFetch('/api/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {});
     authFetch('/api/exam/list').then(r => r.json()).then(d => { setExams(d.exams || []); setLoading(false); }).catch(() => setLoading(false));
@@ -92,7 +94,11 @@ export default function AdminDashboard() {
     setForm(f => ({ ...f, filename: file.name }));
     const reader = new FileReader();
     reader.onload = ev => setForm(f => ({ ...f, content: ev.target?.result as string || '' }));
-    reader.readAsText(file);
+    if (file.type.includes('pdf') || file.type.includes('image') || file.name.match(/\.(pdf|doc|docx|png|jpg|jpeg)$/i)) {
+      reader.readAsDataURL(file);
+    } else {
+      reader.readAsText(file);
+    }
   };
 
   const statIcons = [
@@ -107,28 +113,36 @@ export default function AdminDashboard() {
   const stats = [
     { label: 'Total',      value: exams.length,                                          color: '#2563eb' },
     { label: 'Active',     value: exams.filter(e => !e.expired).length,                  color: '#06b6d4' },
-    { label: 'Archived',   value: exams.filter(e => e.expired).length,                   color: '#8b5cf6' },
+    { label: 'Expired',    value: exams.filter(e => e.expired).length,                   color: '#8b5cf6' },
     { label: 'Decrypted',  value: exams.filter(e => e.status === 'decrypted').length,    color: '#16a34a' },
   ];
 
   return (
     <div className="page-bg" style={{ minHeight: '100vh' }}>
-      <Navbar user={user} />
+      <Navbar
+        user={user}
+        onNotification={(message) => {
+          showToast('info', message);
+          fetchExams();
+        }}
+      />
 
       {/* Toast */}
       {toast && (
         <div style={{
-          position: 'fixed', top: 72, right: 24, zIndex: 99, maxWidth: 400,
+          position: 'fixed', top: 96, right: 24, zIndex: 99, maxWidth: 400,
           padding: '14px 18px', borderRadius: 8, fontSize: 13, lineHeight: 1.5,
           display: 'flex', alignItems: 'center', gap: 8,
           background: '#fff',
-          borderLeft: toast.type === 'success' ? '3px solid #16a34a' : '3px solid #dc2626',
-          color: toast.type === 'success' ? '#166534' : '#991b1b',
+          borderLeft: toast.type === 'success' ? '3px solid #16a34a' : toast.type === 'info' ? '3px solid #2563eb' : '3px solid #dc2626',
+          color: toast.type === 'success' ? '#166534' : toast.type === 'info' ? '#1e40af' : '#991b1b',
           boxShadow: 'var(--shadow-lg)',
           animation: 'fadeUp 0.3s ease-out'
         }}>
           {toast.type === 'success'
             ? <CheckCircle size={16} color="#16a34a" />
+            : toast.type === 'info'
+            ? <LockShield size={16} color="#2563eb" />
             : <XCircle size={16} color="#dc2626" />}
           {toast.text}
         </div>
@@ -217,7 +231,7 @@ export default function AdminDashboard() {
               <div style={{ marginBottom: 16 }}>
                 <label className="field-label" htmlFor="file-upload">Upload file (txt / pdf) — optional</label>
                 <input id="file-upload" className="input" type="file" accept=".txt,.pdf,.doc,.docx" onChange={handleFileRead} style={{ height: 'auto', padding: '10px 14px', cursor: 'pointer' }} />
-                <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 5 }}>Binary files will be read as text in this prototype.</p>
+                <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 5 }}>Binary files (PDFs, images) are securely converted to encrypted blobs.</p>
               </div>
 
               <div style={{ marginBottom: 24 }}>
@@ -240,51 +254,20 @@ export default function AdminDashboard() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div>
-                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
-                  {showHistory ? 'Archived Exams' : 'Active Exams'}
+                <span className="exam-section-heading">
+                  {showHistory ? 'Expired Exams' : 'Active Exams'}
                 </span>
-                <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-3)' }}>
+                <span style={{ marginLeft: 8, fontSize: 14, color: 'var(--text-3)' }}>
                   {showHistory ? exams.filter(e => e.expired).length : exams.filter(e => !e.expired).length} total
                 </span>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <div style={{ display: 'flex', gap: 4, background: 'var(--surface)', padding: '4px', borderRadius: 6 }}>
-                <button
-                  onClick={() => setShowHistory(false)}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: 4,
-                    border: 'none',
-                    background: !showHistory ? '#2563eb' : 'transparent',
-                    color: !showHistory ? 'white' : 'var(--text-3)',
-                    cursor: 'pointer',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  Active
-                </button>
-                <button
-                  onClick={() => setShowHistory(true)}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: 4,
-                    border: 'none',
-                    background: showHistory ? '#7c3aed' : 'transparent',
-                    color: showHistory ? 'white' : 'var(--text-3)',
-                    cursor: 'pointer',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  Archived
-                </button>
-              </div>
-              <button onClick={fetchExams} className="btn btn-ghost btn-sm">↻ Refresh</button>
-            </div>
+            <ExamFilterTabs
+              role={user?.role ?? 'admin'}
+              showExpired={showHistory}
+              onShowActive={() => setShowHistory(false)}
+              onShowExpired={() => setShowHistory(true)}
+            />
           </div>
 
           {loading ? (
@@ -297,7 +280,7 @@ export default function AdminDashboard() {
                 <Inbox size={40} color="var(--text-3)" />
               </div>
               <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>
-                {showHistory ? 'No archived exams' : 'No active exams'}
+                {showHistory ? 'No expired exams' : 'No active exams'}
               </div>
               <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
                 {showHistory 

@@ -5,6 +5,8 @@ import Navbar from '@/components/Navbar';
 import CountdownTimer from '@/components/CountdownTimer';
 import SignaturePanel from '@/components/SignaturePanel';
 import { Key, Pen, Zap, CheckCircle, Ban, Clock, Inbox, ArrowLeft, Document, Clipboard, LockOpen, AlertTriangle, XCircle, Download, Printer } from '@/components/Icons';
+import { getRole, getToken, getUser } from '@/lib/auth-storage';
+import ExamFilterTabs from '@/components/ExamFilterTabs';
 
 interface Exam {
   id: string; title: string; subject: string; examTime: string;
@@ -15,6 +17,35 @@ interface Exam {
 }
 
 interface UserInfo { id: string; name: string; role: 'center_head' | 'invigilator'; username: string; }
+
+async function dataURLtoBlob(dataurl: string): Promise<Blob | null> {
+  try {
+    const res = await fetch(dataurl);
+    return await res.blob();
+  } catch {
+    return null;
+  }
+}
+
+function isPdfContent(content: string) {
+  return content.startsWith('data:application/pdf');
+}
+
+function isImageContent(content: string) {
+  return content.startsWith('data:image/');
+}
+
+function isDataUrl(content: string) {
+  return content.startsWith('data:');
+}
+
+function escapeHtml(text: string) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 export default function CenterPage() {
   const router = useRouter();
@@ -31,7 +62,7 @@ export default function CenterPage() {
   const [showHistory, setShowHistory] = useState(false);
 
   const authFetch = useCallback(async (url: string, options?: RequestInit) => {
-    const t = localStorage.getItem('token') || '';
+    const t = getToken();
     return fetch(url, {
       ...options,
       headers: {
@@ -58,14 +89,13 @@ export default function CenterPage() {
   }, [authFetch, selectedExam]);
 
   useEffect(() => {
-    const t = localStorage.getItem('token');
-    const u = localStorage.getItem('user');
-    const r = localStorage.getItem('role');
-    if (!t || !u || r === 'admin') {
+    const t = getToken();
+    const parsedUser = getUser<UserInfo>();
+    const r = getRole();
+    if (!t || !parsedUser || r === 'admin') {
       router.push('/');
       return;
     }
-    const parsedUser = JSON.parse(u) as UserInfo;
     setUser(parsedUser);
 
     authFetch('/api/exam/list')
@@ -116,7 +146,10 @@ export default function CenterPage() {
 
       if (res.ok) {
         setDecryptedContent(data.content);
-        setAuditLog(data.auditLog);
+        setAuditLog(data.auditLog ?? null);
+        setSelectedExam(prev => prev?.id === examId
+          ? { ...prev, decryptedContent: data.content, status: 'decrypted' }
+          : prev);
         setMessage({ type: 'success', text: 'Exam paper decrypted successfully! All security conditions verified.' });
         await fetchExams();
       } else {
@@ -132,23 +165,69 @@ export default function CenterPage() {
     }
   };
 
+  const getContent = () => decryptedContent || selectedExam?.decryptedContent || '';
+
   const handleDownloadPDF = async () => {
-    if (!paperRef.current || !selectedExam) return;
-    
+    if (!selectedExam) return;
+
+    const contentStr = getContent();
+    if (!contentStr) {
+      setMessage({ type: 'error', text: 'No decrypted content available to download.' });
+      return;
+    }
+
+    const defaultName = selectedExam.originalFilename || `${selectedExam.subject.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}`;
+    const userName = prompt('Enter file name:', defaultName);
+    if (userName === null) return;
+
+    let finalName = userName.trim() || defaultName;
+
+    if (isDataUrl(contentStr)) {
+      try {
+        const blob = await dataURLtoBlob(contentStr);
+        if (!blob) throw new Error('Invalid data URL');
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        if (!finalName.includes('.')) {
+          finalName += isPdfContent(contentStr) ? '.pdf' : isImageContent(contentStr) ? '.png' : '';
+        }
+        a.download = finalName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+        setMessage({ type: 'success', text: 'Document downloaded successfully!' });
+      } catch (error) {
+        console.error('Download error:', error);
+        setMessage({ type: 'error', text: 'Failed to download document.' });
+      }
+      return;
+    }
+
     try {
-      const html2pdf = (await import('html2pdf.js')).default;
-      const element = paperRef.current;
-      const filename = `${selectedExam.subject.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-      
-      const options = {
-        margin: 10,
-        filename: filename,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
-      };
-      
-      html2pdf().set(options).from(element).save();
+      const html2pdfModule = await import('html2pdf.js');
+      const html2pdf = (html2pdfModule as any).default || html2pdfModule;
+
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'padding:32px;font-family:Arial,sans-serif;font-size:16px;line-height:1.9;white-space:pre-wrap;word-break:break-word;color:#111;';
+      wrapper.textContent = contentStr;
+      document.body.appendChild(wrapper);
+
+      if (!finalName.toLowerCase().endsWith('.pdf')) finalName += '.pdf';
+
+      await html2pdf()
+        .set({
+          margin: 10,
+          filename: finalName,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' },
+        })
+        .from(wrapper)
+        .save();
+
+      document.body.removeChild(wrapper);
       setMessage({ type: 'success', text: 'PDF downloaded successfully!' });
     } catch (error) {
       console.error('PDF download error:', error);
@@ -156,43 +235,113 @@ export default function CenterPage() {
     }
   };
 
-  const handlePrint = () => {
-    if (!paperRef.current) return;
-    
-    try {
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        setMessage({ type: 'error', text: 'Failed to open print dialog. Please check your popup settings.' });
-        return;
-      }
-      
-      const content = paperRef.current.innerHTML;
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>${selectedExam?.subject || 'Exam Paper'}</title>
-            <style>
-              body { font-family: Arial, sans-serif; line-height: 1.6; margin: 20px; }
-              h2, h3 { color: #333; }
-              pre { background: #f4f4f4; padding: 10px; border-radius: 4px; overflow-x: auto; }
-              .meta-info { color: #666; font-size: 0.9em; margin: 10px 0; }
-            </style>
-          </head>
-          <body>
-            <h2>${selectedExam?.title || 'Exam Paper'}</h2>
-            <p class="meta-info">Subject: ${selectedExam?.subject}</p>
-            <p class="meta-info">Date: ${new Date().toLocaleString()}</p>
-            <hr />
-            ${content}
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.print();
-    } catch (error) {
-      console.error('Print error:', error);
-      setMessage({ type: 'error', text: 'Failed to open print dialog. Please try again.' });
+  const printFromIframe = (html: string, title: string, cleanup?: () => void) => {
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      cleanup?.();
+      return;
     }
+
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (e) {
+        console.error(e);
+        setMessage({ type: 'error', text: 'Failed to print. Please try again.' });
+      } finally {
+        setTimeout(() => {
+          if (document.body.contains(iframe)) document.body.removeChild(iframe);
+          cleanup?.();
+        }, 1000);
+      }
+    }, 500);
+  };
+
+  const handlePrint = async () => {
+    if (!selectedExam) return;
+
+    const contentStr = getContent();
+    if (!contentStr) {
+      setMessage({ type: 'error', text: 'No decrypted content available to print.' });
+      return;
+    }
+
+    if (isPdfContent(contentStr)) {
+      try {
+        const blob = await dataURLtoBlob(contentStr);
+        if (!blob) throw new Error('Invalid data URL');
+        const blobUrl = URL.createObjectURL(blob);
+
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+        iframe.src = blobUrl;
+        document.body.appendChild(iframe);
+
+        iframe.onload = () => {
+          setTimeout(() => {
+            try {
+              iframe.contentWindow?.focus();
+              iframe.contentWindow?.print();
+            } catch (e) {
+              console.error(e);
+              setMessage({ type: 'error', text: 'Failed to print document.' });
+            } finally {
+              setTimeout(() => {
+                if (document.body.contains(iframe)) document.body.removeChild(iframe);
+                URL.revokeObjectURL(blobUrl);
+              }, 1000);
+            }
+          }, 500);
+        };
+      } catch (error) {
+        console.error('Print error:', error);
+        setMessage({ type: 'error', text: 'Failed to print document.' });
+      }
+      return;
+    }
+
+    if (isImageContent(contentStr)) {
+      printFromIframe(
+        `<html><head><title>${escapeHtml(selectedExam.subject)}</title></head><body style="margin:20px;text-align:center"><img src="${contentStr}" alt="Exam Paper" style="max-width:100%" /></body></html>`,
+        selectedExam.subject,
+      );
+      return;
+    }
+
+    const bodyContent = isDataUrl(contentStr)
+      ? `<p>Binary document — use the PDF button to download.</p>`
+      : `<pre style="white-space:pre-wrap;font-family:Arial,sans-serif;font-size:14px;line-height:1.7;margin:0">${escapeHtml(contentStr)}</pre>`;
+
+    printFromIframe(
+      `<html>
+        <head>
+          <title>${escapeHtml(selectedExam.subject)}</title>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; margin: 20px; color: #111; }
+            h2 { color: #333; margin-bottom: 8px; }
+            .meta-info { color: #666; font-size: 0.9em; margin: 4px 0; }
+          </style>
+        </head>
+        <body>
+          <h2>${escapeHtml(selectedExam.title)}</h2>
+          <p class="meta-info">Subject: ${escapeHtml(selectedExam.subject)}</p>
+          <p class="meta-info">Date: ${new Date().toLocaleString()}</p>
+          <hr />
+          ${bodyContent}
+        </body>
+      </html>`,
+      selectedExam.subject,
+    );
   };
 
   const myRole = user?.role;
@@ -257,7 +406,7 @@ export default function CenterPage() {
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
 
         {/* Page Header */}
-        <div className="anim-fade-up" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 32 }}>
+        <div className="anim-fade-up" style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 32 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: myRole === 'center_head' ? '#eef2f7' : '#ecfdf5', border: `1px solid ${myRole === 'center_head' ? '#d5dae2' : 'rgba(22,163,74,0.15)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               {myRole === 'center_head' ? <Key size={20} color="var(--navy)" /> : <Pen size={20} color="#16a34a" />}
@@ -273,7 +422,6 @@ export default function CenterPage() {
               </p>
             </div>
           </div>
-          <button onClick={fetchExams} className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }}>↻ Refresh</button>
         </div>
 
         {/* Message / Alert */}
@@ -295,47 +443,15 @@ export default function CenterPage() {
           {/* ── Left: Exam List ── */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 8 }}>
-              <span className="section-label">
-                {showHistory ? `Expired Exams(${archivedExams.length})` : `Active Exams (${activeExams.length})`}
+              <span className="exam-section-heading">
+                {showHistory ? `Expired Exams (${archivedExams.length})` : `Active Exams (${activeExams.length})`}
               </span>
-              <div style={{ display: 'flex', gap: 4 }}>
-                <button
-                  onClick={() => setShowHistory(false)}
-                  style={{
-                    padding: '4px 8px',
-                    borderRadius: 4,
-                    border: 'none',
-                    background: !showHistory ? '#2563eb' : 'transparent',
-                    color: !showHistory ? 'white' : 'var(--text-3)',
-                    cursor: 'pointer',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    transition: 'all 0.2s ease',
-                  }}
-                  onMouseEnter={(e) => !showHistory && (e.currentTarget.style.background = '#1d4ed8')}
-                  onMouseLeave={(e) => !showHistory && (e.currentTarget.style.background = '#2563eb')}
-                >
-                  Active
-                </button>
-                <button
-                  onClick={() => setShowHistory(true)}
-                  style={{
-                    padding: '4px 8px',
-                    borderRadius: 4,
-                    border: 'none',
-                    background: showHistory ? '#7c3aed' : 'transparent',
-                    color: showHistory ? 'white' : 'var(--text-3)',
-                    cursor: 'pointer',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    transition: 'all 0.2s ease',
-                  }}
-                  onMouseEnter={(e) => showHistory && (e.currentTarget.style.background = '#6d28d9')}
-                  onMouseLeave={(e) => showHistory && (e.currentTarget.style.background = '#7c3aed')}
-                >
-                  History
-                </button>
-              </div>
+              <ExamFilterTabs
+                role={myRole}
+                showExpired={showHistory}
+                onShowActive={() => setShowHistory(false)}
+                onShowExpired={() => setShowHistory(true)}
+              />
             </div>
 
             {loading ? (
@@ -348,7 +464,7 @@ export default function CenterPage() {
                   <Inbox size={40} color="var(--text-3)" />
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>
-                  {showHistory ? 'No exam history' : 'No active exams'}
+                  {showHistory ? 'No expired exams' : 'No active exams'}
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
                   {showHistory ? 'Expired exams will appear here.' : 'Active exams will appear here.'}
@@ -371,20 +487,20 @@ export default function CenterPage() {
                       className={`exam-list-item ${isSelected ? 'card-selected' : ''}`}
                       style={{ display: 'block' }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', lineHeight: 1.3 }}>{exam.title}</span>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+                        <span className="exam-list-title">{exam.title}</span>
                         <div style={{
-                          width: 8, height: 8, borderRadius: '50%', flexShrink: 0, marginTop: 5,
+                          width: 10, height: 10, borderRadius: '50%', flexShrink: 0, marginTop: 6,
                           background: statusDotColor(exam.status),
                         }} />
                       </div>
-                      <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>{exam.subject}</div>
+                      <div className="exam-list-subject">{exam.subject}</div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span className="mono" style={{ fontSize: 11, color: 'var(--text-4)' }}>
+                        <span className="mono exam-list-meta">
                           {new Date(exam.examTime).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                         </span>
                         {signed && (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
+                          <span className="exam-list-signed">
                             <span className="sig-dot sig-dot-signed" /> Signed
                           </span>
                         )}
@@ -542,8 +658,26 @@ export default function CenterPage() {
                       </div>
                     )}
 
-                    <div className="paper-view" ref={paperRef}>
-                      {decryptedContent || selectedExam.decryptedContent}
+                    <div className="paper-view" ref={paperRef} style={{ padding: isDataUrl(getContent()) ? 0 : undefined }}>
+                      {(() => {
+                        const content = getContent();
+                        if (isPdfContent(content)) {
+                          return <iframe src={content} width="100%" height="800px" style={{ border: 'none', display: 'block' }} title="Exam Paper PDF" />;
+                        }
+                        if (isImageContent(content)) {
+                          return <img src={content} alt="Exam Paper" style={{ maxWidth: '100%', display: 'block', margin: '0 auto' }} />;
+                        }
+                        if (isDataUrl(content)) {
+                          return (
+                            <div style={{ padding: 40, textAlign: 'center' }}>
+                              <Document size={48} color="var(--text-3)" />
+                              <p style={{ marginTop: 16, marginBottom: 16, color: 'var(--text-2)' }}>Binary document loaded. Please download to view.</p>
+                              <a href={content} download={selectedExam.originalFilename || 'document'} className="btn btn-primary">Download Document</a>
+                            </div>
+                          );
+                        }
+                        return content;
+                      })()}
                     </div>
                   </div>
                 )}

@@ -51,7 +51,7 @@ export default function ExamCard({ exam, index }: { exam: Exam; role: string; in
     <div
       className="card card-hover anim-fade-up"
       style={{
-        padding: '22px 24px',
+        padding: '26px 28px',
         animationDelay: `${index * 0.05}s`,
         borderLeft: `3px solid ${cfg.dot}`,
         transition: 'all 0.22s ease',
@@ -84,10 +84,10 @@ export default function ExamCard({ exam, index }: { exam: Exam; role: string; in
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
             <div style={{ minWidth: 0 }}>
               <h3 style={{
-                fontSize: 15,
+                fontSize: 17,
                 fontWeight: 600,
                 color: 'var(--text-1)',
-                marginBottom: 3,
+                marginBottom: 4,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
@@ -95,7 +95,7 @@ export default function ExamCard({ exam, index }: { exam: Exam; role: string; in
               }}>
                 {exam.title}
               </h3>
-              <span style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 500 }}>{exam.subject}</span>
+              <span style={{ fontSize: 14, color: 'var(--text-3)', fontWeight: 500 }}>{exam.subject}</span>
             </div>
             <span className={`badge ${cfg.badge}`} style={{ flexShrink: 0 }}>
               <span style={{
@@ -114,10 +114,10 @@ export default function ExamCard({ exam, index }: { exam: Exam; role: string; in
             display: 'flex',
             flexWrap: 'wrap',
             gap: '6px 24px',
-            fontSize: 12,
+            fontSize: 14,
             color: 'var(--text-3)',
             marginBottom: 16,
-            padding: '10px 14px',
+            padding: '12px 16px',
             background: '#f8fafc',
             borderRadius: 'var(--radius-sm)',
             border: '1px solid #f1f5f9',
@@ -151,7 +151,7 @@ export default function ExamCard({ exam, index }: { exam: Exam; role: string; in
                 { label: 'Center Head', signed: exam.signatures.centerHead },
                 { label: 'Invigilator', signed: exam.signatures.invigilator },
               ].map(({ label, signed }) => (
-                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
                   <span className={`sig-dot ${signed ? 'sig-dot-signed' : 'sig-dot-unsigned'}`} />
                   <span style={{ color: signed ? 'var(--green)' : 'var(--text-3)', fontWeight: signed ? 600 : 400 }}>
                     {label}: {signed ? 'Signed' : 'Pending'}
@@ -159,11 +159,11 @@ export default function ExamCard({ exam, index }: { exam: Exam; role: string; in
                 </div>
               ))}
               <span style={{
-                fontSize: 11,
+                fontSize: 13,
                 fontWeight: 600,
                 color: sigCount === 2 ? 'var(--green)' : 'var(--text-3)',
                 background: sigCount === 2 ? '#f0fdf4' : '#f8fafc',
-                padding: '3px 10px',
+                padding: '5px 12px',
                 borderRadius: 99,
                 border: `1px solid ${sigCount === 2 ? '#dcfce7' : 'var(--border)'}`,
               }}>
@@ -173,7 +173,7 @@ export default function ExamCard({ exam, index }: { exam: Exam; role: string; in
 
             {/* Personnel */}
             <div style={{
-              fontSize: 11,
+              fontSize: 13,
               color: 'var(--text-3)',
               textAlign: 'right',
               maxWidth: 240,

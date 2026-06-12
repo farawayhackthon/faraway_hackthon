@@ -46,9 +46,24 @@ export interface ExamRecord {
   originalFilename?: string;
 }
 
+export interface NotificationRecord {
+  id: string;
+  userId: string;
+  type: 'exam_decrypted';
+  examId: string;
+  examTitle: string;
+  subject: string;
+  decryptedBy: string;
+  decryptedByRole: string;
+  message: string;
+  createdAt: string;
+  read: boolean;
+}
+
 interface StoreData {
   users: User[];
   exams: ExamRecord[];
+  notifications: NotificationRecord[];
 }
 
 // ─── Default Seed Data ────────────────────────────────────────────────────────
@@ -84,6 +99,7 @@ function getDefaultData(): StoreData {
       },
     ],
     exams: [],
+    notifications: [],
   };
 }
 
@@ -100,7 +116,12 @@ class MockStore {
     try {
       if (fs.existsSync(DATA_FILE)) {
         const raw = fs.readFileSync(DATA_FILE, 'utf8');
-        return JSON.parse(raw) as StoreData;
+        const parsed = JSON.parse(raw) as Partial<StoreData>;
+        return {
+          users: parsed.users ?? getDefaultData().users,
+          exams: parsed.exams ?? [],
+          notifications: parsed.notifications ?? [],
+        };
       }
     } catch {
       // Corrupt file — reset
@@ -176,6 +197,41 @@ class MockStore {
     else status = 'scheduled';
 
     return { status, minutesUntilExam: diffMin, windowOpen, expired };
+  }
+
+  // Notifications
+  addNotification(notification: NotificationRecord): void {
+    this.data.notifications.unshift(notification);
+    this.save();
+  }
+
+  getNotificationsForUser(userId: string): NotificationRecord[] {
+    return this.data.notifications
+      .filter(n => n.userId === userId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  getUnreadNotificationCount(userId: string): number {
+    return this.data.notifications.filter(n => n.userId === userId && !n.read).length;
+  }
+
+  markNotificationRead(id: string, userId: string): boolean {
+    const notification = this.data.notifications.find(n => n.id === id && n.userId === userId);
+    if (!notification || notification.read) return false;
+    notification.read = true;
+    this.save();
+    return true;
+  }
+
+  markAllNotificationsRead(userId: string): void {
+    let changed = false;
+    for (const notification of this.data.notifications) {
+      if (notification.userId === userId && !notification.read) {
+        notification.read = true;
+        changed = true;
+      }
+    }
+    if (changed) this.save();
   }
 
   reset(): void {

@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Shield, Key, Pen, LockShield, Lock, Eye, EyeOff, AlertTriangle, AlarmClock } from '@/components/Icons';
+import { getRole, getToken, setAuth } from '@/lib/auth-storage';
+import { ROLE_THEMES } from '@/lib/role-theme';
 
 const ROLES = [
   {
@@ -9,7 +11,7 @@ const ROLES = [
     label: 'Exam Board Admin',
     tag: 'Administrator',
     icon: <Shield size={19} />,
-    accent: '#3b82f6',
+    accent: ROLE_THEMES.admin.accent,
     desc: 'Upload & encrypt exam papers. Set exam time and assign personnel.',
     username: 'admin',
     password: 'Admin@123',
@@ -19,7 +21,7 @@ const ROLES = [
     label: 'Center Head',
     tag: 'Regional Center',
     icon: <Key size={19} />,
-    accent: '#06b6d4',
+    accent: ROLE_THEMES.center_head.accent,
     desc: 'View assigned exams and provide Signature 1 to authorize decryption.',
     username: 'centerhead',
     password: 'Center@123',
@@ -29,7 +31,7 @@ const ROLES = [
     label: 'Invigilator',
     tag: 'Exam Hall',
     icon: <Pen size={19} />,
-    accent: '#10b981',
+    accent: ROLE_THEMES.invigilator.accent,
     desc: 'View assigned exams and provide Signature 2 to complete unlock.',
     username: 'invigilator',
     password: 'Invigil@123',
@@ -46,8 +48,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const role = localStorage.getItem('role');
+    const token = getToken();
+    const role = getRole();
     if (token && role) {
       router.push(role === 'admin' ? '/admin' : '/center');
     }
@@ -72,9 +74,7 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Login failed'); return; }
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('role', data.user.role);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      setAuth(data.token, data.user, data.user.role);
       router.push(data.user.role === 'admin' ? '/admin' : '/center');
     } catch {
       setError('Network error. Please try again.');
@@ -98,7 +98,7 @@ export default function LoginPage() {
         <div className="anim-fade-up" style={{ textAlign: 'center', marginBottom: 52 }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 20, padding: '8px 20px', background: '#eef2f7', border: '1px solid #d5dae2', borderRadius: 99 }}>
             <LockShield size={16} color="var(--navy)" />
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--navy)', textTransform: 'uppercase' as const }}>SecureExam System</span>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--navy)', textTransform: 'uppercase' as const }}>Secure-Exam System</span>
           </div>
           <h1 style={{ fontSize: 40, fontWeight: 800, color: 'var(--navy)', letterSpacing: '-0.035em', lineHeight: 1.1, marginBottom: 12 }}>
             Anti-Leak Exam<br />
