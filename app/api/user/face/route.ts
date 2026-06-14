@@ -26,10 +26,19 @@ export async function GET(request: Request) {
     const staffCheck = requireStaff(payload);
     if (staffCheck) return NextResponse.json({ error: staffCheck.error }, { status: staffCheck.status });
 
-    const user = await getStore().getUserById(payload!.userId);
+    const user = getStore().getUserById(payload!.userId);
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-
+    // Vercel Ephemeral Storage Hack: Restore face descriptor from cookie if missing
+    if (!user.faceDescriptor?.length) {
+      const cookieFace = cookies().get(`vercel_mock_face_${user.id}`)?.value;
+      if (cookieFace) {
+        try {
+          user.faceDescriptor = JSON.parse(cookieFace);
+          getStore().updateUser(user.id, { faceDescriptor: user.faceDescriptor });
+        } catch {}
+      }
+    }
 
     return NextResponse.json({
       enrolled: Boolean(user.faceDescriptor?.length),
@@ -74,19 +83,25 @@ export async function POST(request: Request) {
     }
 
     const store = getStore();
-    const existingUser = await store.getUserById(payload!.userId);
+    const existingUser = store.getUserById(payload!.userId);
     const wasEnrolled = Boolean(existingUser?.faceDescriptor?.length);
 
-    const updated = await store.updateUser(payload!.userId, {
+    const updated = store.updateUser(payload!.userId, {
       faceDescriptor: finalDescriptor,
       faceEnrolledAt: new Date().toISOString(),
     });
 
     if (!updated) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
+    // Vercel Ephemeral Storage Hack: Save to cookie
+    cookies().set(`vercel_mock_face_${updated.id}`, JSON.stringify(finalDescriptor), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+    });
 
-
-    await logAudit({
+    logAudit({
       event: 'face_enrolled',
       actorId: payload!.userId,
       actorName: updated.name,
@@ -96,10 +111,9 @@ export async function POST(request: Request) {
         : `${updated.name} enrolled their face profile.`,
     });
 
-    const allUsers = await store.getUsers();
-    const admins = allUsers.filter(u => u.role === 'admin');
+    const admins = store.getUsers().filter(u => u.role === 'admin');
     for (const admin of admins) {
-      await store.addNotification({
+      store.addNotification({
         id: uuidv4(),
         userId: admin.id,
         type: 'face_enrolled',
@@ -150,10 +164,19 @@ export async function PUT(request: Request) {
     }
 
     const store = getStore();
-    const user = await store.getUserById(payload!.userId);
+    const user = store.getUserById(payload!.userId);
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-
+    // Vercel Ephemeral Storage Hack: Restore face descriptor from cookie if missing
+    if (!user.faceDescriptor?.length) {
+      const cookieFace = cookies().get(`vercel_mock_face_${user.id}`)?.value;
+      if (cookieFace) {
+        try {
+          user.faceDescriptor = JSON.parse(cookieFace);
+          store.updateUser(user.id, { faceDescriptor: user.faceDescriptor });
+        } catch {}
+      }
+    }
 
     if (!user.faceDescriptor?.length) {
       return NextResponse.json({
@@ -162,7 +185,7 @@ export async function PUT(request: Request) {
       }, { status: 403 });
     }
 
-    const exam = await store.getExamById(examId);
+    const exam = store.getExamById(examId);
     if (!exam) return NextResponse.json({ error: 'Exam not found' }, { status: 404 });
 
     if (payload!.role === 'center_head' && exam.centerHeadId !== payload!.userId) {
@@ -175,7 +198,7 @@ export async function PUT(request: Request) {
     const { match, distance } = facesMatch(user.faceDescriptor, descriptor);
     if (!match) {
       console.warn(`[FACE VERIFY FAIL] User ${user.name} — distance ${distance.toFixed(3)}`);
-      await logAudit({
+      logAudit({
         examId: exam.id,
         examTitle: exam.title,
         event: 'face_verification_failed',
@@ -193,7 +216,7 @@ export async function PUT(request: Request) {
     }
 
     const faceVerificationToken = signFaceVerificationToken(payload!.userId, examId);
-    await logAudit({
+    logAudit({
       examId: exam.id,
       examTitle: exam.title,
       event: 'face_verified',

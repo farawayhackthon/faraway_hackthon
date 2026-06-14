@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     }
 
     const store = getStore();
-    const exam = await store.getExamById(examId);
+    const exam = store.getExamById(examId);
 
     if (!exam) {
       return NextResponse.json({ error: 'Exam not found' }, { status: 404 });
@@ -35,11 +35,11 @@ export async function POST(request: Request) {
 
     // Increment print count
     const currentCount = exam.printCount || 0;
-    await store.updateExam(examId, { printCount: currentCount + 1 });
+    store.updateExam(examId, { printCount: currentCount + 1 });
 
-    const user = await store.getUserById(payload.userId);
+    const user = store.getUserById(payload.userId);
     if (user) {
-      await store.addAuditLog({
+      store.addAuditLog({
         id: uuidv4(),
         examId: exam.id,
         examTitle: exam.title,

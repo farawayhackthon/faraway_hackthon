@@ -28,8 +28,8 @@ export async function POST(request: Request) {
     const store = getStore();
 
     // Validate assigned users exist and have correct roles
-    const ch = await store.getUserById(centerHeadId);
-    const inv = await store.getUserById(invigilatorId);
+    const ch = store.getUserById(centerHeadId);
+    const inv = store.getUserById(invigilatorId);
 
     if (!ch || ch.role !== 'center_head') {
       return NextResponse.json({ error: 'Invalid Center Head ID' }, { status: 400 });
@@ -87,30 +87,15 @@ export async function POST(request: Request) {
       originalFilename: filename || 'exam-paper.txt',
     };
 
-    await store.addExam(examRecord);
+    store.addExam(examRecord);
 
-    const admins = await store.getUsers();
-    for (const admin of admins) {
-      if (admin.role !== 'admin') continue;
-      await store.addNotification({
-        id: uuidv4(),
-        userId: admin.id,
-        type: 'exam_decrypted',
-        examId: examRecord.id,
-        examTitle: examRecord.title,
-        message: `New exam uploaded: ${examRecord.title}`,
-        createdAt: new Date().toISOString(),
-        read: false,
-      });
-    }
-
-    const adminUser = await store.getUserById(payload.userId);
-    await logAudit({
+    const admin = store.getUserById(payload.userId);
+    logAudit({
       examId,
       examTitle: title,
       event: 'exam_uploaded',
       actorId: payload.userId,
-      actorName: adminUser?.name ?? 'Admin',
+      actorName: admin?.name ?? 'Admin',
       actorRole: 'Admin',
       message: `Exam "${title}" encrypted and scheduled for ${examDate.toLocaleString()}.`,
       metadata: { subject, centerHeadId, invigilatorId },

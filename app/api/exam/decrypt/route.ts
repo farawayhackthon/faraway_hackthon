@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getStore, ExamRecord } from '@/lib/store';
+import { getStore } from '@/lib/store';
 import { verifyToken } from '@/lib/jwt';
 import { decrypt } from '@/lib/crypto';
 import { verifyFaceVerificationToken } from '@/lib/face';
@@ -7,7 +7,7 @@ import { buildTraceId } from '@/lib/watermark';
 import { logAudit } from '@/lib/audit';
 import { v4 as uuidv4 } from 'uuid';
 
-function buildAuditResponse(exam: ExamRecord | undefined) {
+function buildAuditResponse(exam: ReturnType<ReturnType<typeof getStore>['getExamById']>) {
   if (!exam) return null;
   const ra = exam.releaseAudit;
   return {
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     }
 
     const store = getStore();
-    const exam = await store.getExamById(examId);
+    const exam = store.getExamById(examId);
 
     if (!exam) {
       return NextResponse.json({ error: 'Exam not found' }, { status: 404 });
@@ -59,8 +59,8 @@ export async function POST(request: Request) {
 
     // ─── Already decrypted — allow assigned staff to view (no re-face-verify) ─
     if (exam.decryptedContent) {
-      const viewer = await store.getUserById(payload.userId);
-      await logAudit({
+      const viewer = store.getUserById(payload.userId);
+      logAudit({
         examId: exam.id,
         examTitle: exam.title,
         event: 'exam_viewed',
@@ -118,7 +118,7 @@ export async function POST(request: Request) {
     }
 
     // ─── GATE 3: Face Verification (first release only) ─────────────────────
-    const user = await store.getUserById(payload.userId);
+    const user = store.getUserById(payload.userId);
     if (!user?.faceDescriptor?.length) {
       return NextResponse.json({
         error: 'FACE NOT ENROLLED: Register your face profile before decrypting exam papers.',
@@ -147,7 +147,7 @@ export async function POST(request: Request) {
       const masterPassphrase = decrypt(exam.encryptedKey, vaultKey, exam.keySalt);
       const decryptedContent = decrypt(exam.encryptedPayload, masterPassphrase, exam.salt);
 
-      const decryptor = await store.getUserById(payload.userId);
+      const decryptor = store.getUserById(payload.userId);
       const roleLabel = payload.role === 'center_head' ? 'Center Head' : 'Invigilator';
       const decryptedAt = new Date().toISOString();
       const traceId = buildTraceId(examId, decryptedAt);
@@ -162,13 +162,13 @@ export async function POST(request: Request) {
         centerId: decryptor?.centerId,
       };
 
-      await store.updateExam(examId, {
+      store.updateExam(examId, {
         decryptedContent,
         status: 'decrypted',
         releaseAudit,
       });
 
-      await store.addNotification({
+      store.addNotification({
         id: uuidv4(),
         userId: exam.uploadedBy,
         type: 'exam_decrypted',
@@ -182,7 +182,7 @@ export async function POST(request: Request) {
         read: false,
       });
 
-      await logAudit({
+      logAudit({
         examId: exam.id,
         examTitle: exam.title,
         event: 'exam_decrypted',

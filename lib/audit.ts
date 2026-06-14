@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getStore, type AuditLogEntry } from '@/lib/store';
 import type { AuditEventType } from '@/lib/audit-types';
 
-export async function logAudit(input: {
+export function logAudit(input: {
   examId?: string;
   examTitle?: string;
   event: AuditEventType;
@@ -11,7 +11,7 @@ export async function logAudit(input: {
   actorRole: string;
   message: string;
   metadata?: Record<string, string | number | boolean>;
-}): Promise<AuditLogEntry> {
+}): AuditLogEntry {
   const entry: AuditLogEntry = {
     id: uuidv4(),
     examId: input.examId,
@@ -24,6 +24,6 @@ export async function logAudit(input: {
     metadata: input.metadata,
     createdAt: new Date().toISOString(),
   };
-  await getStore().addAuditLog(entry);
+  getStore().addAuditLog(entry);
   return entry;
 }
