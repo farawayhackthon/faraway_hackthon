@@ -23,14 +23,7 @@ function getStoragePath(): string {
   }
 
   const localPath = path.join(process.cwd(), '.mock-store.json');
-  try {
-    const testFile = path.join(process.cwd(), '.write-test');
-    fs.writeFileSync(testFile, 'test');
-    fs.unlinkSync(testFile);
-    return localPath;
-  } catch {
-    return path.join(os.tmpdir(), '.mock-store.json');
-  }
+  return localPath;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -191,17 +184,22 @@ class MockStore {
     try {
       if (fs.existsSync(dbPath)) {
         const raw = fs.readFileSync(dbPath, 'utf8');
-        const parsed = JSON.parse(raw) as Partial<StoreData>;
-        this.lastMtime = fs.statSync(dbPath).mtimeMs;
-        return {
-          users: parsed.users ?? getDefaultData().users,
-          exams: parsed.exams ?? [],
-          notifications: parsed.notifications ?? [],
-          auditLogs: parsed.auditLogs ?? [],
-        };
+        try {
+          const parsed = JSON.parse(raw) as Partial<StoreData>;
+          this.lastMtime = fs.statSync(dbPath).mtimeMs;
+          return {
+            users: parsed.users ?? getDefaultData().users,
+            exams: parsed.exams ?? [],
+            notifications: parsed.notifications ?? [],
+            auditLogs: parsed.auditLogs ?? [],
+          };
+        } catch (parseErr) {
+          console.error('JSON Parse error on mock database. Returning in-memory data to avoid wipe.', parseErr);
+          return this.data || getDefaultData();
+        }
       }
     } catch {
-      // Corrupt file — reset
+      // Ignored
     }
     const defaults = getDefaultData();
     this.save(defaults);
@@ -210,8 +208,10 @@ class MockStore {
 
   private save(data?: StoreData): void {
     const dbPath = getStoragePath();
+    const tmpPath = dbPath + '.tmp';
     try {
-      fs.writeFileSync(dbPath, JSON.stringify(data ?? this.data, null, 2), 'utf8');
+      fs.writeFileSync(tmpPath, JSON.stringify(data ?? this.data, null, 2), 'utf8');
+      fs.renameSync(tmpPath, dbPath);
       this.lastMtime = fs.statSync(dbPath).mtimeMs;
     } catch (err) {
       console.error('Failed to write mock database file:', err);
