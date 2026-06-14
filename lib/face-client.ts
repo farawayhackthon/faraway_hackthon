@@ -87,6 +87,7 @@ export interface FaceDetectionResult {
   detected: boolean;
   box?: { x: number; y: number; width: number; height: number };
   score?: number;
+  yaw?: number;
 }
 
 export async function detectFace(video: HTMLVideoElement): Promise<FaceDetectionResult> {
@@ -95,15 +96,31 @@ export async function detectFace(video: HTMLVideoElement): Promise<FaceDetection
   try {
     const faceapi = await import('@vladmandic/face-api');
     const options = await getDetectOptions();
-    const detection = await faceapi.detectSingleFace(video, options as InstanceType<typeof faceapi.TinyFaceDetectorOptions>);
+    const detection = await faceapi
+      .detectSingleFace(video, options as InstanceType<typeof faceapi.TinyFaceDetectorOptions>)
+      .withFaceLandmarks();
 
     if (!detection) return { detected: false };
 
-    const box = detection.box;
+    const box = detection.detection.box;
+    const pts = detection.landmarks.positions;
+    
+    // Estimate yaw (negative = looking right, positive = looking left)
+    const nose = pts[30];
+    const leftEdge = pts[0];
+    const rightEdge = pts[16];
+    const distLeft = nose.x - leftEdge.x;
+    const distRight = rightEdge.x - nose.x;
+    let yaw = 0;
+    if (distRight > 0 && distLeft > 0) {
+      yaw = (distLeft - distRight) / (distLeft + distRight);
+    }
+
     return {
       detected: true,
       box: { x: box.x, y: box.y, width: box.width, height: box.height },
-      score: detection.score,
+      score: detection.detection.score,
+      yaw,
     };
   } catch {
     return { detected: false };

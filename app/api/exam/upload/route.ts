@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getStore, ExamRecord } from '@/lib/store';
 import { verifyToken } from '@/lib/jwt';
 import { encrypt, generatePassphrase } from '@/lib/crypto';
+import { logAudit } from '@/lib/audit';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(request: Request) {
@@ -87,6 +88,18 @@ export async function POST(request: Request) {
     };
 
     store.addExam(examRecord);
+
+    const admin = store.getUserById(payload.userId);
+    logAudit({
+      examId,
+      examTitle: title,
+      event: 'exam_uploaded',
+      actorId: payload.userId,
+      actorName: admin?.name ?? 'Admin',
+      actorRole: 'Admin',
+      message: `Exam "${title}" encrypted and scheduled for ${examDate.toLocaleString()}.`,
+      metadata: { subject, centerHeadId, invigilatorId },
+    });
 
     console.log(`[SECURE STORE] Exam "${title}" encrypted & stored. ID: ${examId}`);
     console.log(`[IPFS-SIM] CID would be: sha256(${encryptedPayload.substring(0, 20)}...)`);

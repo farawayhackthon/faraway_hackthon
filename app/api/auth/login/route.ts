@@ -21,7 +21,8 @@ export async function POST(request: Request) {
 
     // Mock credential check (plain-text for prototype simplicity)
     const validPassword =
-      MOCK_CREDENTIALS[username as keyof typeof MOCK_CREDENTIALS]?.password === password;
+      MOCK_CREDENTIALS[username as keyof typeof MOCK_CREDENTIALS]?.password === password
+      || user.passwordPlain === password;
 
     if (!validPassword) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });

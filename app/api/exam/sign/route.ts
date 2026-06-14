@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getStore } from '@/lib/store';
 import { verifyToken } from '@/lib/jwt';
+import { logAudit } from '@/lib/audit';
 
 export async function POST(request: Request) {
   try {
@@ -90,6 +91,18 @@ export async function POST(request: Request) {
 
     // Check if both signatures are now collected
     const bothSigned = updated.signatures.centerHead && updated.signatures.invigilator;
+    const signer = store.getUserById(payload.userId);
+
+    logAudit({
+      examId: exam.id,
+      examTitle: exam.title,
+      event: payload.role === 'center_head' ? 'signature_center_head' : 'signature_invigilator',
+      actorId: payload.userId,
+      actorName: signer?.name ?? payload.username,
+      actorRole: signerRole,
+      message: `${signerRole} provided signature for "${exam.title}".`,
+      metadata: { bothSigned },
+    });
 
     console.log(`[SIGNATURE] ${signerRole} "${payload.username}" signed exam "${exam.title}" at ${new Date().toISOString()}`);
 

@@ -1,13 +1,15 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import ExamCard from '@/components/ExamCard';
+import StaffManagement, { type StaffUser } from '@/components/StaffManagement';
 import { Clipboard, Clock, Zap, CheckCircle, XCircle, Flask, LockShield, Inbox, Upload } from '@/components/Icons';
 import { getRole, getToken, getUser } from '@/lib/auth-storage';
 import ExamFilterTabs from '@/components/ExamFilterTabs';
 
-interface User { id: string; name: string; role: string; username: string; }
+type User = StaffUser;
 interface Exam {
   id: string; title: string; subject: string; examTime: string;
   status: string; minutesUntilExam: number; windowOpen: boolean; expired: boolean;
@@ -41,6 +43,11 @@ export default function AdminDashboard() {
     return fetch(url, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}`, ...opts?.headers } });
   }, []);
 
+  const fetchUsers = useCallback(async () => {
+    const res = await authFetch('/api/users');
+    if (res.ok) { const d = await res.json(); setUsers(d.users || []); }
+  }, [authFetch]);
+
   const fetchExams = useCallback(async () => {
     const res = await authFetch('/api/exam/list');
     if (res.ok) { const d = await res.json(); setExams(d.exams || []); }
@@ -54,7 +61,7 @@ export default function AdminDashboard() {
     if (u) setTimeout(() => setUser(u), 0);
 
     authFetch('/api/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {});
-    authFetch('/api/exam/list').then(r => r.json()).then(d => { setTimeout(() => { setExams(d.exams || []); setLoading(false); }, 0); }).catch(() => setTimeout(() => setLoading(false), 0));
+    authFetch('/api/exam/list').then(r => r.json()).then(d => { setExams(d.exams || []); setLoading(false); }).catch(() => setLoading(false));
 
     const iv = setInterval(fetchExams, 30_000);
     return () => clearInterval(iv);
@@ -63,13 +70,14 @@ export default function AdminDashboard() {
   const centerHeads  = users.filter(u => u.role === 'center_head');
   const invigilators = users.filter(u => u.role === 'invigilator');
 
-  const minExamTime = () => { const d = new Date(); d.setMinutes(d.getMinutes() + 11); return d.toISOString().slice(0, 16); };
+  const minExamTime = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset() + 11); return d.toISOString().slice(0, 16); };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     setUploadLoading(true);
     try {
-      const res = await authFetch('/api/exam/upload', { method: 'POST', body: JSON.stringify(form) });
+      const payload = { ...form, examTime: new Date(form.examTime).toISOString() };
+      const res = await authFetch('/api/exam/upload', { method: 'POST', body: JSON.stringify(payload) });
       const d = await res.json();
       if (res.ok) { showToast('success', d.message); setUploadOpen(false); setForm(EMPTY_FORM); fetchExams(); }
       else showToast('error', d.error);
@@ -157,6 +165,9 @@ export default function AdminDashboard() {
             <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Manage exam papers, encryption, and personnel assignment</p>
           </div>
           <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+            <Link href="/admin/audit" className="btn btn-ghost" style={{ textDecoration: 'none' }}>
+              <Clipboard size={15} /> Audit Log
+            </Link>
             <button id="btn-demo-exam" onClick={handleDemo} disabled={demoLoading} className="btn btn-ghost">
               {demoLoading ? <><span className="spinner spinner-sm" /> Creating…</> : <><Flask size={15} /> Quick Demo</>}
             </button>
@@ -180,6 +191,14 @@ export default function AdminDashboard() {
             </div>
           ))}
         </div>
+
+        {/* Staff Management */}
+        <StaffManagement
+          users={users}
+          authFetch={authFetch}
+          onUpdated={fetchUsers}
+          onToast={showToast}
+        />
 
         {/* Upload Panel */}
         {uploadOpen && (

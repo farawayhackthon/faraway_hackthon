@@ -22,6 +22,7 @@ export interface User {
   centerId?: string;
   faceDescriptor?: number[]; // 128-dim face embedding for biometric verification
   faceEnrolledAt?: string;
+  passwordPlain?: string; // prototype-only credential for admin-created staff
 }
 
 export interface ExamRecord {
@@ -46,6 +47,40 @@ export interface ExamRecord {
   decryptedContent?: string; // Only populated after successful multi-sig + time-lock
   uploadedBy: string;        // admin user id
   originalFilename?: string;
+  releaseAudit?: {
+    decryptedAt: string;
+    decryptedBy: string;
+    decryptedByRole: string;
+    decryptedById: string;
+    faceVerifiedAt: string;
+    traceId: string;
+    centerId?: string;
+  };
+  printCount?: number;
+}
+
+export type AuditEventType =
+  | 'exam_uploaded'
+  | 'signature_center_head'
+  | 'signature_invigilator'
+  | 'face_enrolled'
+  | 'face_verified'
+  | 'face_verification_failed'
+  | 'exam_decrypted'
+  | 'exam_viewed'
+  | 'exam_printed';
+
+export interface AuditLogEntry {
+  id: string;
+  examId?: string;
+  examTitle?: string;
+  event: AuditEventType;
+  actorId: string;
+  actorName: string;
+  actorRole: string;
+  message: string;
+  metadata?: Record<string, string | number | boolean>;
+  createdAt: string;
 }
 
 export interface NotificationRecord {
@@ -66,6 +101,7 @@ interface StoreData {
   users: User[];
   exams: ExamRecord[];
   notifications: NotificationRecord[];
+  auditLogs: AuditLogEntry[];
 }
 
 // ─── Default Seed Data ────────────────────────────────────────────────────────
@@ -102,6 +138,7 @@ function getDefaultData(): StoreData {
     ],
     exams: [],
     notifications: [],
+    auditLogs: [],
   };
 }
 
@@ -123,6 +160,7 @@ class MockStore {
           users: parsed.users ?? getDefaultData().users,
           exams: parsed.exams ?? [],
           notifications: parsed.notifications ?? [],
+          auditLogs: parsed.auditLogs ?? [],
         };
       }
     } catch {
@@ -152,6 +190,20 @@ class MockStore {
     this.data.users[idx] = { ...this.data.users[idx], ...updates };
     this.save();
     return this.data.users[idx];
+  }
+
+  addUser(user: User): User {
+    this.data = this.load();
+    this.data.users.push(user);
+    this.save();
+    return user;
+  }
+
+  resetUserFace(id: string): User | null {
+    return this.updateUser(id, {
+      faceDescriptor: undefined,
+      faceEnrolledAt: undefined,
+    });
   }
 
   // Exams
@@ -254,6 +306,24 @@ class MockStore {
       }
     }
     if (changed) this.save();
+  }
+
+  // Audit logs
+  addAuditLog(entry: AuditLogEntry): void {
+    this.data = this.load();
+    this.data.auditLogs.unshift(entry);
+    this.save();
+  }
+
+  getAuditLogs(): AuditLogEntry[] {
+    this.data = this.load();
+    return [...this.data.auditLogs].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }
+
+  getAuditLogsForExam(examId: string): AuditLogEntry[] {
+    return this.getAuditLogs().filter(e => e.examId === examId);
   }
 
   /** Remove expired demo exams to keep the store usable for live testing */

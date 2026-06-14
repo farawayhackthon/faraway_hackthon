@@ -28,6 +28,8 @@ export {
   Bell,
   ScanFace,
   Camera,
+  Filter,
+  UserPlus,
 } from 'lucide-react';
 
 // Clock is also used as AlarmClock in some components

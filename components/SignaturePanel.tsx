@@ -12,6 +12,7 @@ interface Exam {
   expired: boolean;
   status: string;
   decryptedContent?: string;
+  isReleased?: boolean;
 }
 
 interface SignaturePanelProps {
@@ -47,7 +48,7 @@ export default function SignaturePanel({
   const { signatures, windowOpen, expired, status } = exam;
   const bothSigned = signatures.centerHead && signatures.invigilator;
   const mySignature = myRole === 'center_head' ? signatures.centerHead : signatures.invigilator;
-  const isDecrypted = status === 'decrypted' || Boolean(exam.decryptedContent);
+  const isDecrypted = status === 'decrypted' || Boolean(exam.decryptedContent) || Boolean(exam.isReleased);
   const readyForFace = bothSigned && !isDecrypted;
 
   const gate1Pass = windowOpen && !expired;

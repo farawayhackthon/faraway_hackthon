@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getStore } from '@/lib/store';
 import { verifyToken } from '@/lib/jwt';
 import { averageDescriptors, facesMatch, signFaceVerificationToken } from '@/lib/face';
+import { logAudit } from '@/lib/audit';
 
 function requireStaff(payload: ReturnType<typeof verifyToken>) {
   if (!payload) return { error: 'Invalid token', status: 401 as const };
@@ -79,6 +80,16 @@ export async function POST(request: Request) {
 
     if (!updated) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
+    logAudit({
+      event: 'face_enrolled',
+      actorId: payload!.userId,
+      actorName: updated.name,
+      actorRole: updated.role === 'center_head' ? 'Center Head' : 'Invigilator',
+      message: wasEnrolled
+        ? `${updated.name} updated their face profile.`
+        : `${updated.name} enrolled their face profile.`,
+    });
+
     console.log(`[FACE ${wasEnrolled ? 'RE-ENROLL' : 'ENROLL'}] User ${updated.name} enrolled face biometrics`);
 
     return NextResponse.json({
@@ -141,6 +152,16 @@ export async function PUT(request: Request) {
     const { match, distance } = facesMatch(user.faceDescriptor, descriptor);
     if (!match) {
       console.warn(`[FACE VERIFY FAIL] User ${user.name} — distance ${distance.toFixed(3)}`);
+      logAudit({
+        examId: exam.id,
+        examTitle: exam.title,
+        event: 'face_verification_failed',
+        actorId: payload!.userId,
+        actorName: user.name,
+        actorRole: payload!.role === 'center_head' ? 'Center Head' : 'Invigilator',
+        message: `Face verification failed for ${user.name} on "${exam.title}".`,
+        metadata: { distance },
+      });
       return NextResponse.json({
         error: 'FACE VERIFICATION FAILED: Identity could not be confirmed. Only the enrolled center head or invigilator may decrypt.',
         gate: 'FACE_MISMATCH',
@@ -149,6 +170,16 @@ export async function PUT(request: Request) {
     }
 
     const faceVerificationToken = signFaceVerificationToken(payload!.userId, examId);
+    logAudit({
+      examId: exam.id,
+      examTitle: exam.title,
+      event: 'face_verified',
+      actorId: payload!.userId,
+      actorName: user.name,
+      actorRole: payload!.role === 'center_head' ? 'Center Head' : 'Invigilator',
+      message: `Face verified for ${user.name} on "${exam.title}".`,
+      metadata: { distance },
+    });
     console.log(`[FACE VERIFY OK] User ${user.name} verified for exam ${examId} (distance ${distance.toFixed(3)})`);
 
     return NextResponse.json({

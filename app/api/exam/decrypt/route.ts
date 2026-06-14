@@ -3,7 +3,22 @@ import { getStore } from '@/lib/store';
 import { verifyToken } from '@/lib/jwt';
 import { decrypt } from '@/lib/crypto';
 import { verifyFaceVerificationToken } from '@/lib/face';
+import { buildTraceId } from '@/lib/watermark';
+import { logAudit } from '@/lib/audit';
 import { v4 as uuidv4 } from 'uuid';
+
+function buildAuditResponse(exam: ReturnType<ReturnType<typeof getStore>['getExamById']>) {
+  if (!exam) return null;
+  const ra = exam.releaseAudit;
+  return {
+    centerHeadSignedAt: exam.signatures.centerHeadAt,
+    invigilatorSignedAt: exam.signatures.invigilatorAt,
+    faceVerifiedAt: ra?.faceVerifiedAt,
+    faceVerifiedUser: ra?.decryptedBy,
+    decryptedAt: ra?.decryptedAt,
+    traceId: ra?.traceId,
+  };
+}
 
 export async function POST(request: Request) {
   try {
@@ -32,7 +47,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Exam not found' }, { status: 404 });
     }
 
-    // ─── Verify access ────────────────────────────────────────────────────────
     if (payload.role === 'admin') {
       return NextResponse.json({ error: 'Admins cannot decrypt exam papers' }, { status: 403 });
     }
@@ -43,7 +57,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Not assigned to this exam' }, { status: 403 });
     }
 
-    // ─── GATE 1: Time-Lock Check ──────────────────────────────────────────────
+    // ─── Already decrypted — allow assigned staff to view (no re-face-verify) ─
+    if (exam.decryptedContent) {
+      const viewer = store.getUserById(payload.userId);
+      logAudit({
+        examId: exam.id,
+        examTitle: exam.title,
+        event: 'exam_viewed',
+        actorId: payload.userId,
+        actorName: viewer?.name ?? 'Unknown',
+        actorRole: payload.role === 'center_head' ? 'Center Head' : 'Invigilator',
+        message: `Decrypted paper viewed by ${viewer?.name ?? 'staff'}.`,
+      });
+
+      return NextResponse.json({
+        success: true,
+        content: exam.decryptedContent,
+        alreadyCached: true,
+        decryptedAt: exam.releaseAudit?.decryptedAt,
+        releaseAudit: exam.releaseAudit,
+        auditLog: buildAuditResponse(exam),
+      });
+    }
+
+    // ─── GATE 1: Time-Lock ────────────────────────────────────────────────────
     const computed = store.computeExamStatus(exam);
 
     if (computed.expired) {
@@ -63,7 +100,7 @@ export async function POST(request: Request) {
       }, { status: 403 });
     }
 
-    // ─── GATE 2: Multi-Signature Check ───────────────────────────────────────
+    // ─── GATE 2: Multi-Signature ────────────────────────────────────────────
     if (!exam.signatures.centerHead) {
       return NextResponse.json({
         error: 'MULTI-SIG INCOMPLETE: Waiting for Center Head signature (Signature 1).',
@@ -80,9 +117,7 @@ export async function POST(request: Request) {
       }, { status: 403 });
     }
 
-
-
-    // ─── GATE 3: Face Verification (required for first release only) ──────────
+    // ─── GATE 3: Face Verification (first release only) ─────────────────────
     const user = store.getUserById(payload.userId);
     if (!user?.faceDescriptor?.length) {
       return NextResponse.json({
@@ -106,38 +141,33 @@ export async function POST(request: Request) {
       }, { status: 403 });
     }
 
-    // ─── Already decrypted? Return cached (requires face verification) ────────
-    if (exam.decryptedContent) {
-      return NextResponse.json({
-        success: true,
-        content: exam.decryptedContent,
-        alreadyCached: true,
-        decryptedAt: exam.signatures.invigilatorAt ?? exam.signatures.centerHeadAt,
-        auditLog: {
-          centerHeadSignedAt: exam.signatures.centerHeadAt,
-          invigilatorSignedAt: exam.signatures.invigilatorAt,
-          decryptedAt: exam.signatures.invigilatorAt ?? exam.signatures.centerHeadAt,
-        },
-      });
-    }
-
-    // ─── UNLOCK: Both gates passed — decrypt ─────────────────────────────────
+    // ─── UNLOCK: Decrypt ────────────────────────────────────────────────────
     try {
-      // Recover the master passphrase from the encrypted key vault
       const vaultKey = `${process.env.VAULT_SECRET || 'vault-secret-key'}-${exam.uploadedBy}`;
       const masterPassphrase = decrypt(exam.encryptedKey, vaultKey, exam.keySalt);
-
-      // Decrypt the actual exam content
       const decryptedContent = decrypt(exam.encryptedPayload, masterPassphrase, exam.salt);
-
-      // Cache the decrypted content
-      store.updateExam(examId, {
-        decryptedContent,
-        status: 'decrypted',
-      });
 
       const decryptor = store.getUserById(payload.userId);
       const roleLabel = payload.role === 'center_head' ? 'Center Head' : 'Invigilator';
+      const decryptedAt = new Date().toISOString();
+      const traceId = buildTraceId(examId, decryptedAt);
+
+      const releaseAudit = {
+        decryptedAt,
+        decryptedBy: decryptor?.name ?? 'Unknown',
+        decryptedByRole: roleLabel,
+        decryptedById: payload.userId,
+        faceVerifiedAt: decryptedAt,
+        traceId,
+        centerId: decryptor?.centerId,
+      };
+
+      store.updateExam(examId, {
+        decryptedContent,
+        status: 'decrypted',
+        releaseAudit,
+      });
+
       store.addNotification({
         id: uuidv4(),
         userId: exam.uploadedBy,
@@ -148,23 +178,35 @@ export async function POST(request: Request) {
         decryptedBy: decryptor?.name ?? 'Unknown',
         decryptedByRole: roleLabel,
         message: `"${exam.title}" was decrypted by ${decryptor?.name ?? 'center staff'} (${roleLabel}).`,
-        createdAt: new Date().toISOString(),
+        createdAt: decryptedAt,
         read: false,
       });
 
-      console.log(`[DECRYPT SUCCESS] Exam "${exam.title}" decrypted. Time: ${new Date().toISOString()}`);
-      console.log(`[AUDIT] CH signed: ${exam.signatures.centerHeadAt}, Inv signed: ${exam.signatures.invigilatorAt}`);
+      logAudit({
+        examId: exam.id,
+        examTitle: exam.title,
+        event: 'exam_decrypted',
+        actorId: payload.userId,
+        actorName: decryptor?.name ?? 'Unknown',
+        actorRole: roleLabel,
+        message: `Exam paper decrypted and released. Trace ID: ${traceId}`,
+        metadata: { traceId },
+      });
+
+      console.log(`[DECRYPT SUCCESS] Exam "${exam.title}" decrypted. Trace: ${traceId}`);
 
       return NextResponse.json({
         success: true,
         content: decryptedContent,
-        decryptedAt: new Date().toISOString(),
+        decryptedAt,
+        releaseAudit,
         auditLog: {
           centerHeadSignedAt: exam.signatures.centerHeadAt,
           invigilatorSignedAt: exam.signatures.invigilatorAt,
-          faceVerifiedAt: new Date().toISOString(),
+          faceVerifiedAt: decryptedAt,
           faceVerifiedUser: decryptor?.name ?? 'Unknown',
-          decryptedAt: new Date().toISOString(),
+          decryptedAt,
+          traceId,
         },
       });
     } catch (decryptErr) {

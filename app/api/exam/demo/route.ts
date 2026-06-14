@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getStore, ExamRecord } from '@/lib/store';
 import { verifyToken } from '@/lib/jwt';
 import { encrypt, generatePassphrase } from '@/lib/crypto';
+import { logAudit } from '@/lib/audit';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -131,6 +132,18 @@ Do not turn over until instructed by the invigilator.`;
     };
 
     store.addExam(examRecord);
+
+    const admin = store.getUserById(payload.userId);
+    logAudit({
+      examId: examRecord.id,
+      examTitle: examRecord.title,
+      event: 'exam_uploaded',
+      actorId: payload.userId,
+      actorName: admin?.name ?? 'Admin',
+      actorRole: 'Admin',
+      message: `Demo exam "${examRecord.title}" created for live testing.`,
+      metadata: { demo: true, minutesFromNow },
+    });
 
     return NextResponse.json({
       success: true,

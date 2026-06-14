@@ -1,12 +1,14 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import CountdownTimer from '@/components/CountdownTimer';
 import SignaturePanel from '@/components/SignaturePanel';
 import FaceVerificationModal from '@/components/FaceVerificationModal';
-import { Key, Pen, Zap, CheckCircle, Ban, Clock, Inbox, ArrowLeft, Document, Clipboard, LockOpen, AlertTriangle, XCircle, Download, Printer, ScanFace } from '@/components/Icons';
+import WatermarkedPaper from '@/components/WatermarkedPaper';
+import { Key, Pen, Zap, CheckCircle, Ban, Clock, Inbox, ArrowLeft, Clipboard, LockOpen, AlertTriangle, XCircle, Download, Printer, ScanFace } from '@/components/Icons';
 import { getRole, getToken, getUser } from '@/lib/auth-storage';
+import { buildWatermarkMeta, buildWatermarkedPrintHtml, escapeHtml as wmEscapeHtml } from '@/lib/watermark';
 import ExamFilterTabs from '@/components/ExamFilterTabs';
 
 interface Exam {
@@ -15,9 +17,19 @@ interface Exam {
   signatures: { centerHead: boolean; centerHeadAt?: string; invigilator: boolean; invigilatorAt?: string };
   centerHeadName: string; invigilatorName: string;
   originalFilename?: string; decryptedContent?: string;
+  isReleased?: boolean;
+  releaseAudit?: {
+    decryptedAt: string;
+    decryptedBy: string;
+    decryptedByRole: string;
+    faceVerifiedAt: string;
+    traceId: string;
+    centerId?: string;
+  } | null;
+  printCount?: number;
 }
 
-interface UserInfo { id: string; name: string; role: 'center_head' | 'invigilator'; username: string; }
+interface UserInfo { id: string; name: string; role: 'center_head' | 'invigilator'; username: string; centerId?: string; }
 
 async function dataURLtoBlob(dataurl: string): Promise<Blob | null> {
   try {
@@ -51,7 +63,6 @@ function escapeHtml(text: string) {
 export default function CenterPage() {
   const router = useRouter();
   const paperSectionRef = useRef<HTMLDivElement>(null);
-  const paperRef = useRef<HTMLDivElement>(null);
   const [user, setUser] = useState<UserInfo | null>(null);
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,6 +105,39 @@ export default function CenterPage() {
     selectedExamIdRef.current = selectedExam?.id ?? null;
   }, [selectedExam?.id]);
 
+  const buildAuditFromExam = useCallback((exam: Exam, apiAudit?: Record<string, string> | null) => {
+    const ra = exam.releaseAudit;
+    if (apiAudit) return apiAudit;
+    if (!ra && !exam.signatures.centerHead) return null;
+    const log: Record<string, string> = {};
+    if (exam.signatures.centerHeadAt) log.centerHeadSignedAt = exam.signatures.centerHeadAt;
+    if (exam.signatures.invigilatorAt) log.invigilatorSignedAt = exam.signatures.invigilatorAt;
+    if (ra?.faceVerifiedAt) log.faceVerifiedAt = ra.faceVerifiedAt;
+    if (ra?.decryptedBy) log.faceVerifiedUser = ra.decryptedBy;
+    if (ra?.decryptedAt) log.decryptedAt = ra.decryptedAt;
+    if (ra?.traceId) log.traceId = ra.traceId;
+    return Object.keys(log).length ? log : null;
+  }, []);
+
+  const loadReleasedPaper = useCallback(async (exam: Exam) => {
+    try {
+      const res = await authFetch('/api/exam/decrypt', {
+        method: 'POST',
+        body: JSON.stringify({ examId: exam.id }),
+      });
+      const data = await res.json();
+      if (res.ok && data.content) {
+        setDecryptedContent(data.content);
+        setAuditLog(buildAuditFromExam(exam, data.auditLog));
+        setSelectedExam(prev => prev?.id === exam.id
+          ? { ...prev, ...exam, decryptedContent: data.content, status: 'decrypted', releaseAudit: data.releaseAudit ?? exam.releaseAudit }
+          : prev);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [authFetch, buildAuditFromExam]);
+
   const fetchExams = useCallback(async () => {
     try {
       const res = await authFetch('/api/exam/list');
@@ -113,6 +157,8 @@ export default function CenterPage() {
         return {
           ...updated,
           decryptedContent: updated.decryptedContent ?? prev.decryptedContent,
+          releaseAudit: updated.releaseAudit ?? prev.releaseAudit,
+          isReleased: updated.isReleased ?? prev.isReleased,
         };
       });
       if (updated.decryptedContent) {
@@ -200,10 +246,10 @@ export default function CenterPage() {
 
   const handleDecrypt = async (examId: string) => {
     const exam = exams.find(e => e.id === examId) ?? (selectedExam?.id === examId ? selectedExam : null);
-    if (exam?.decryptedContent) {
-      setDecryptedContent(exam.decryptedContent);
-      setSelectedExam(prev => prev?.id === examId ? { ...prev, ...exam, status: 'decrypted' } : prev);
-      setMessage({ type: 'success', text: 'Exam paper is already decrypted. Scroll down to view.' });
+    if (!exam) return;
+    if (exam.isReleased || exam.status === 'decrypted') {
+      await loadReleasedPaper(exam);
+      setMessage({ type: 'success', text: 'Exam paper loaded. Scroll down to view.' });
       setTimeout(() => paperSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
       return;
     }
@@ -227,9 +273,15 @@ export default function CenterPage() {
         setDecryptedContent(data.content);
         setAuditLog(data.auditLog ?? null);
         setSelectedExam(prev => prev?.id === examId
-          ? { ...prev, decryptedContent: data.content, status: 'decrypted' }
+          ? {
+            ...prev,
+            decryptedContent: data.content,
+            status: 'decrypted',
+            isReleased: true,
+            releaseAudit: data.releaseAudit ?? prev.releaseAudit,
+          }
           : prev);
-        setMessage({ type: 'success', text: 'Exam paper released! Scroll down to view the decrypted paper.' });
+        setMessage({ type: 'success', text: 'Exam paper released! Scroll down to view the watermarked paper.' });
         await fetchExams();
         setTimeout(() => paperSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
       } else {
@@ -248,8 +300,40 @@ export default function CenterPage() {
 
   const getContent = () => decryptedContent || selectedExam?.decryptedContent || '';
 
+  const watermarkMeta = useMemo(() => {
+    if (!selectedExam || !user) return null;
+    const ra = selectedExam.releaseAudit;
+    return buildWatermarkMeta({
+      examId: selectedExam.id,
+      examTitle: selectedExam.title,
+      subject: selectedExam.subject,
+      centerId: ra?.centerId ?? user.centerId,
+      releasedBy: auditLog?.faceVerifiedUser ?? ra?.decryptedBy ?? user.name,
+      releasedByRole: ra?.decryptedByRole ?? (user.role === 'center_head' ? 'Center Head' : 'Invigilator'),
+      releasedAt: auditLog?.decryptedAt ?? ra?.decryptedAt ?? auditLog?.faceVerifiedAt,
+    });
+  }, [selectedExam, user, auditLog]);
+
+  const logPrintAction = async (examId: string, actionType: 'print' | 'pdf_download') => {
+    try {
+      const res = await authFetch('/api/exam/print-audit', {
+        method: 'POST',
+        body: JSON.stringify({ examId, actionType }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedExam(prev => prev && prev.id === examId ? { ...prev, printCount: data.printCount } : prev);
+        setExams(prev => prev.map(e => e.id === examId ? { ...e, printCount: data.printCount } : e));
+      }
+    } catch (e) {
+      console.error('Failed to log print action:', e);
+    }
+  };
+
   const handleDownloadPDF = async () => {
     if (!selectedExam) return;
+
+    await logPrintAction(selectedExam.id, 'pdf_download');
 
     const contentStr = getContent();
     if (!contentStr) {
@@ -291,9 +375,11 @@ export default function CenterPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const html2pdf = (html2pdfModule as any).default || html2pdfModule;
 
+      const bodyHtml = `<pre style="white-space:pre-wrap;font-family:Arial,sans-serif;font-size:14px;line-height:1.7;margin:0">${wmEscapeHtml(contentStr)}</pre>`;
       const wrapper = document.createElement('div');
-      wrapper.style.cssText = 'padding:32px;font-family:Arial,sans-serif;font-size:16px;line-height:1.9;white-space:pre-wrap;word-break:break-word;color:#111;';
-      wrapper.textContent = contentStr;
+      wrapper.innerHTML = watermarkMeta
+        ? buildWatermarkedPrintHtml(bodyHtml, watermarkMeta, selectedExam.title)
+        : bodyHtml;
       document.body.appendChild(wrapper);
 
       if (!finalName.toLowerCase().endsWith('.pdf')) finalName += '.pdf';
@@ -306,11 +392,11 @@ export default function CenterPage() {
           html2canvas: { scale: 2, useCORS: true },
           jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' },
         })
-        .from(wrapper)
+        .from(wrapper.querySelector('.wm-page') ?? wrapper)
         .save();
 
       document.body.removeChild(wrapper);
-      setMessage({ type: 'success', text: 'PDF downloaded successfully!' });
+      setMessage({ type: 'success', text: 'Watermarked PDF downloaded successfully!' });
     } catch (error) {
       console.error('PDF download error:', error);
       setMessage({ type: 'error', text: 'Failed to generate PDF. Please try again.' });
@@ -351,6 +437,8 @@ export default function CenterPage() {
 
   const handlePrint = async () => {
     if (!selectedExam) return;
+
+    await logPrintAction(selectedExam.id, 'print');
 
     const contentStr = getContent();
     if (!contentStr) {
@@ -393,8 +481,11 @@ export default function CenterPage() {
     }
 
     if (isImageContent(contentStr)) {
+      const imgHtml = `<div style="text-align:center"><img src="${contentStr}" alt="Exam Paper" style="max-width:100%" /></div>`;
       printFromIframe(
-        `<html><head><title>${escapeHtml(selectedExam.subject)}</title></head><body style="margin:20px;text-align:center"><img src="${contentStr}" alt="Exam Paper" style="max-width:100%" /></body></html>`,
+        watermarkMeta
+          ? buildWatermarkedPrintHtml(imgHtml, watermarkMeta, selectedExam.subject)
+          : `<html><head><title>${escapeHtml(selectedExam.subject)}</title></head><body style="margin:20px;text-align:center"><img src="${contentStr}" alt="Exam Paper" style="max-width:100%" /></body></html>`,
         selectedExam.subject,
       );
       return;
@@ -405,7 +496,9 @@ export default function CenterPage() {
       : `<pre style="white-space:pre-wrap;font-family:Arial,sans-serif;font-size:14px;line-height:1.7;margin:0">${escapeHtml(contentStr)}</pre>`;
 
     printFromIframe(
-      `<html>
+      watermarkMeta
+        ? buildWatermarkedPrintHtml(bodyContent, watermarkMeta, selectedExam.subject)
+        : `<html>
         <head>
           <title>${escapeHtml(selectedExam.subject)}</title>
           <style>
@@ -438,7 +531,7 @@ export default function CenterPage() {
   const canDecrypt = (exam: Exam) =>
     exam.windowOpen && !exam.expired &&
     exam.signatures.centerHead && exam.signatures.invigilator &&
-    !exam.decryptedContent && exam.status !== 'decrypted';
+    !exam.isReleased && exam.status !== 'decrypted';
 
   const statusBadgeClass = (status: string) => {
     switch (status) {
@@ -511,55 +604,55 @@ export default function CenterPage() {
         </div>
 
         {/* Face Enrollment Card */}
-        <div className="anim-fade-up" style={{ marginBottom: 24 }}>
-          <div
-            className="card"
-            style={{
-              padding: '16px 20px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 16,
-              border: faceEnrolled ? '1px solid rgba(22,163,74,0.15)' : '1px solid rgba(234,179,8,0.3)',
-              background: faceEnrolled ? 'rgba(22,163,74,0.03)' : 'rgba(234,179,8,0.03)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{
-                width: 38, height: 38, borderRadius: 10,
-                background: faceEnrolled ? '#f0fdf4' : '#fffbeb',
-                border: `1px solid ${faceEnrolled ? 'rgba(22,163,74,0.15)' : 'rgba(234,179,8,0.2)'}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              }}>
-                <ScanFace size={18} color={faceEnrolled ? '#16a34a' : '#d97706'} />
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 2 }}>
-                  {faceEnrolled ? 'Face Profile Registered' : 'Face Registration Required'}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.4 }}>
-                  {faceEnrolled
-                    ? 'Your face is enrolled for biometric verification. You can re-enroll anytime.'
-                    : 'Register your face now to avoid delays during exam decryption.'}
-                </div>
-              </div>
-            </div>
-            <button
-              id="btn-face-enroll"
-              type="button"
-              className={faceEnrolled ? 'btn' : 'btn btn-primary'}
-              style={{ height: 38, fontSize: 12, padding: '0 16px', whiteSpace: 'nowrap', flexShrink: 0 }}
-              onClick={() => {
-                setFaceModalMode('enroll');
-                setPendingDecryptExamId(null);
-                setFaceModalOpen(true);
+        {!faceEnrolled && (
+          <div className="anim-fade-up" style={{ marginBottom: 24 }}>
+            <div
+              className="card"
+              style={{
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 16,
+                border: '1px solid rgba(234,179,8,0.3)',
+                background: 'rgba(234,179,8,0.03)',
               }}
             >
-              <ScanFace size={14} />
-              &nbsp;{faceEnrolled ? 'Re-enroll Face' : 'Register Face Now'}
-            </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 38, height: 38, borderRadius: 10,
+                  background: '#fffbeb',
+                  border: '1px solid rgba(234,179,8,0.2)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}>
+                  <ScanFace size={18} color="#d97706" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 2 }}>
+                    Face Registration Required
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.4 }}>
+                    Register your face now to avoid delays during exam decryption.
+                  </div>
+                </div>
+              </div>
+              <button
+                id="btn-face-enroll"
+                type="button"
+                className="btn btn-primary"
+                style={{ height: 38, fontSize: 12, padding: '0 16px', whiteSpace: 'nowrap', flexShrink: 0 }}
+                onClick={() => {
+                  setFaceModalMode('enroll');
+                  setPendingDecryptExamId(null);
+                  setFaceModalOpen(true);
+                }}
+              >
+                <ScanFace size={14} />
+                &nbsp;Register Face Now
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Message / Alert */}
         {message && (
@@ -619,11 +712,11 @@ export default function CenterPage() {
                       key={exam.id}
                       onClick={() => {
                         setSelectedExam(exam);
-                        setDecryptedContent(exam.decryptedContent ?? null);
+                        setDecryptedContent(null);
                         setMessage(null);
-                        setAuditLog(null);
-                        if (exam.decryptedContent) {
-                          setTimeout(() => paperSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
+                        setAuditLog(buildAuditFromExam(exam));
+                        if (exam.isReleased || exam.status === 'decrypted') {
+                          loadReleasedPaper(exam);
                         }
                       }}
                       className={`exam-list-item ${isSelected ? 'card-selected' : ''}`}
@@ -639,7 +732,7 @@ export default function CenterPage() {
                       <div className="exam-list-subject">{exam.subject}</div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span className="mono exam-list-meta">
-                          {new Date(exam.examTime).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          {new Date(exam.examTime).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                         </span>
                         {signed && (
                           <span className="exam-list-signed">
@@ -701,12 +794,12 @@ export default function CenterPage() {
                 {/* Countdown */}
                 <CountdownTimer
                   examTime={selectedExam.examTime}
-                  decrypted={selectedExam.status === 'decrypted' || Boolean(decryptedContent || selectedExam.decryptedContent)}
+                  decrypted={selectedExam.status === 'decrypted' || selectedExam.isReleased || Boolean(decryptedContent)}
                 />
 
                 {/* Signature Panel */}
                 <SignaturePanel
-                  exam={selectedExam}
+                  exam={{ ...selectedExam, isReleased: selectedExam.isReleased || Boolean(decryptedContent) }}
                   myRole={myRole || ''}
                   canSign={canSign(selectedExam)}
                   canDecrypt={canDecrypt(selectedExam)}
@@ -717,7 +810,7 @@ export default function CenterPage() {
                 />
 
                 {/* Waiting for face verification */}
-                {canDecrypt(selectedExam) && !decryptedContent && !selectedExam.decryptedContent && (
+                {canDecrypt(selectedExam) && !selectedExam.isReleased && (
                   <div className="card" style={{ padding: 32, textAlign: 'center', borderStyle: 'dashed' }}>
                     <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
                       <ScanFace size={40} color="var(--text-3)" />
@@ -734,8 +827,13 @@ export default function CenterPage() {
                   </div>
                 )}
 
-                {/* Decrypted Paper — appears below after face verification */}
-                {(decryptedContent || selectedExam.decryptedContent) && (
+                {(selectedExam.isReleased || selectedExam.status === 'decrypted') && !getContent() && (
+                  <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>
+                    <span className="spinner" style={{ marginRight: 10 }} /> Loading released exam paper…
+                  </div>
+                )}
+
+                {(decryptedContent || selectedExam.isReleased || selectedExam.status === 'decrypted') && getContent() && watermarkMeta && (
                   <div ref={paperSectionRef} className="card card-glow-green anim-fade-up" style={{ padding: 24 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 20 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -818,32 +916,26 @@ export default function CenterPage() {
                           {auditLog.invigilatorSignedAt && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Pen size={12} /> Inv Signed: {new Date(auditLog.invigilatorSignedAt).toLocaleString()}</span>}
                           {auditLog.faceVerifiedAt && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><ScanFace size={12} /> Face Verified ({auditLog.faceVerifiedUser}): {new Date(auditLog.faceVerifiedAt).toLocaleString()}</span>}
                           {auditLog.decryptedAt && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><LockOpen size={12} /> Decrypted: {new Date(auditLog.decryptedAt).toLocaleString()}</span>}
+                          {auditLog.traceId && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Trace ID: {auditLog.traceId}</span>}
+                          {selectedExam.printCount !== undefined && selectedExam.printCount > 0 && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#d97706', marginTop: 4 }}>
+                              <Printer size={12} /> Printed/Downloaded {selectedExam.printCount} time{selectedExam.printCount === 1 ? '' : 's'}
+                            </span>
+                          )}
                         </div>
                       </div>
                     )}
 
-                    <div className="paper-view" ref={paperRef} style={{ padding: isDataUrl(getContent()) ? 0 : undefined }}>
-                      {(() => {
-                        const content = getContent();
-                        if (isPdfContent(content)) {
-                          return <iframe src={content} width="100%" height="800px" style={{ border: 'none', display: 'block' }} title="Exam Paper PDF" />;
-                        }
-                        if (isImageContent(content)) {
-                          // eslint-disable-next-line @next/next/no-img-element
-                          return <img src={content} alt="Exam Paper" style={{ maxWidth: '100%', display: 'block', margin: '0 auto' }} />;
-                        }
-                        if (isDataUrl(content)) {
-                          return (
-                            <div style={{ padding: 40, textAlign: 'center' }}>
-                              <Document size={48} color="var(--text-3)" />
-                              <p style={{ marginTop: 16, marginBottom: 16, color: 'var(--text-2)' }}>Binary document loaded. Please download to view.</p>
-                              <a href={content} download={selectedExam.originalFilename || 'document'} className="btn btn-primary">Download Document</a>
-                            </div>
-                          );
-                        }
-                        return content;
-                      })()}
-                    </div>
+                    {watermarkMeta && (
+                      <WatermarkedPaper
+                        content={getContent()}
+                        meta={watermarkMeta}
+                        originalFilename={selectedExam.originalFilename}
+                        isPdf={isPdfContent}
+                        isImage={isImageContent}
+                        isDataUrl={isDataUrl}
+                      />
+                    )}
                   </div>
                 )}
               </div>

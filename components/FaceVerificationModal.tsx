@@ -48,6 +48,7 @@ export default function FaceVerificationModal({
   const [faceDetected, setFaceDetected] = useState(false);
   const [faceScore, setFaceScore] = useState(0);
   const [captureProgress, setCaptureProgress] = useState<CaptureProgress | null>(null);
+  const [livenessStep, setLivenessStep] = useState<'turn_left' | 'turn_right' | 'passed'>('turn_left');
 
   /* ─── Stop camera & detection ──────────────────────────────────────────── */
   const stopCamera = useCallback(() => {
@@ -70,6 +71,7 @@ export default function FaceVerificationModal({
         setFaceDetected(false);
         setFaceScore(0);
         setCaptureProgress(null);
+        setLivenessStep('turn_left');
       }, 0);
       return () => clearTimeout(t);
     }
@@ -82,6 +84,7 @@ export default function FaceVerificationModal({
         setError(null);
         setSuccessMsg(null);
         setFaceDetected(false);
+        setLivenessStep('turn_left');
 
         await loadFaceModels();
         if (cancelled) return;
@@ -104,6 +107,13 @@ export default function FaceVerificationModal({
               if (!cancelled) {
                 setFaceDetected(result.detected);
                 setFaceScore(result.score ?? 0);
+                if (result.detected && result.yaw !== undefined) {
+                  setLivenessStep(prev => {
+                    if (prev === 'turn_left' && result.yaw! > 0.15) return 'turn_right';
+                    if (prev === 'turn_right' && result.yaw! < -0.15) return 'passed';
+                    return prev;
+                  });
+                }
               }
             },
             350,
@@ -255,14 +265,20 @@ export default function FaceVerificationModal({
     }
     if (phase === 'processing') return '⏳ Processing…';
     if (phase === 'success') return null;
-    if (faceDetected) return '✅ Face detected — ready to capture';
-    return '⚠️ No face detected — position your face in the oval';
+    if (!faceDetected) return '⚠️ No face detected — position your face in the oval';
+    
+    // Liveness checks
+    if (livenessStep === 'turn_left') return '🔄 Please turn your head slightly to the left';
+    if (livenessStep === 'turn_right') return '🔄 Now turn your head slightly to the right';
+    
+    return '✅ Liveness verified — ready to capture';
   })();
 
   /* ─── Button disabled state ────────────────────────────────────────────── */
   const buttonDisabled =
     phase === 'loading' || phase === 'capturing' || phase === 'processing' || phase === 'success' ||
-    (!faceDetected && phase === 'ready');
+    (!faceDetected && phase === 'ready') ||
+    livenessStep !== 'passed';
 
   return (
     <div

@@ -555,6 +555,112 @@ select.input { cursor: pointer; appearance: none; background-image: url("data:im
   animation: slideUp 0.5s ease-out;
 }
 
+/* ─── Watermarked paper ───────────────────────────────────────────────────── */
+.watermarked-paper {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.watermark-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #991b1b;
+  line-height: 1.5;
+}
+
+.watermark-strip-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #dc2626;
+}
+
+.watermark-strip-note {
+  font-size: 10px;
+  font-weight: 500;
+  color: #b91c1c;
+  opacity: 0.85;
+}
+
+.watermarked-paper-body {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: #fff;
+}
+
+.watermarked-paper-body::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.045;
+  background-image: repeating-linear-gradient(
+    -32deg,
+    transparent,
+    transparent 48px,
+    rgba(153, 27, 27, 0.9) 48px,
+    rgba(153, 27, 27, 0.9) 49px
+  );
+}
+
+.watermarked-paper-body::after {
+  content: var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text) " \00B7  " var(--wm-text);
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.07;
+  font-size: 15px;
+  font-weight: 700;
+  color: #991b1b;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transform: rotate(-24deg);
+  display: block;
+  text-align: center;
+  line-height: 4.5;
+  overflow: hidden;
+  white-space: pre-wrap;
+}
+
+.watermarked-paper-content {
+  position: relative;
+  z-index: 1;
+  min-height: 120px;
+}
+
+.paper-view-inner {
+  padding: 32px;
+  font-size: 16px;
+  line-height: 1.9;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-1);
+}
+
+.watermarked-paper .paper-view {
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  animation: none;
+}
+
 /* ─── Progress bar ────────────────────────────────────────────────────────── */
 .progress-bar {
   height: 3px;

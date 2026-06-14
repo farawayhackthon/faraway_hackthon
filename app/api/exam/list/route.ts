@@ -42,7 +42,9 @@ export async function GET(request: Request) {
         invigilatorName: inv?.name ?? 'Unknown',
         uploadedByName: uploader?.name ?? 'Unknown',
         originalFilename: exam.originalFilename,
-        // Removed decryptedContent to prevent bypassing face verification
+        isReleased: Boolean(exam.decryptedContent),
+        releaseAudit: exam.releaseAudit ?? null,
+        printCount: exam.printCount ?? 0,
       };
     });
 
