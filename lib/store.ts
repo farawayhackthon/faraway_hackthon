@@ -33,8 +33,6 @@ function getStoragePath(): string {
   }
 }
 
-const DATA_FILE = getStoragePath();
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface User {
@@ -176,9 +174,10 @@ class MockStore {
   }
 
   private load(): StoreData {
+    const dbPath = getStoragePath();
     try {
-      if (fs.existsSync(DATA_FILE)) {
-        const raw = fs.readFileSync(DATA_FILE, 'utf8');
+      if (fs.existsSync(dbPath)) {
+        const raw = fs.readFileSync(dbPath, 'utf8');
         const parsed = JSON.parse(raw) as Partial<StoreData>;
         return {
           users: parsed.users ?? getDefaultData().users,
@@ -196,8 +195,9 @@ class MockStore {
   }
 
   private save(data?: StoreData): void {
+    const dbPath = getStoragePath();
     try {
-      fs.writeFileSync(DATA_FILE, JSON.stringify(data ?? this.data, null, 2), 'utf8');
+      fs.writeFileSync(dbPath, JSON.stringify(data ?? this.data, null, 2), 'utf8');
     } catch (err) {
       console.error('Failed to write mock database file:', err);
     }
