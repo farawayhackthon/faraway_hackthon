@@ -29,17 +29,7 @@ export async function GET(request: Request) {
     const user = await getStore().getUserById(payload!.userId);
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    // Vercel Ephemeral Storage Hack: Restore face descriptor from cookie if missing
-    if (!user.faceDescriptor?.length) {
-      const cookieStore = await cookies();
-      const cookieFace = cookieStore.get(`vercel_mock_face_${user.id}`)?.value;
-      if (cookieFace) {
-        try {
-          user.faceDescriptor = JSON.parse(cookieFace);
-          await getStore().updateUser(user.id, { faceDescriptor: user.faceDescriptor });
-        } catch {}
-      }
-    }
+
 
     return NextResponse.json({
       enrolled: Boolean(user.faceDescriptor?.length),
@@ -94,14 +84,7 @@ export async function POST(request: Request) {
 
     if (!updated) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    // Vercel Ephemeral Storage Hack: Save to cookie
-    const cookieStore = await cookies();
-    cookieStore.set(`vercel_mock_face_${updated.id}`, JSON.stringify(finalDescriptor), {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-    });
+
 
     await logAudit({
       event: 'face_enrolled',
@@ -170,17 +153,7 @@ export async function PUT(request: Request) {
     const user = await store.getUserById(payload!.userId);
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    // Vercel Ephemeral Storage Hack: Restore face descriptor from cookie if missing
-    if (!user.faceDescriptor?.length) {
-      const cookieStore = await cookies();
-      const cookieFace = cookieStore.get(`vercel_mock_face_${user.id}`)?.value;
-      if (cookieFace) {
-        try {
-          user.faceDescriptor = JSON.parse(cookieFace);
-          await store.updateUser(user.id, { faceDescriptor: user.faceDescriptor });
-        } catch {}
-      }
-    }
+
 
     if (!user.faceDescriptor?.length) {
       return NextResponse.json({

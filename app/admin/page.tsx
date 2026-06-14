@@ -70,7 +70,7 @@ export default function AdminDashboard() {
   const centerHeads  = users.filter(u => u.role === 'center_head');
   const invigilators = users.filter(u => u.role === 'invigilator');
 
-  const minExamTime = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset() + 7); return d.toISOString().slice(0, 16); };
+  const minExamTime = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset() + 6); return d.toISOString().slice(0, 16); };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();

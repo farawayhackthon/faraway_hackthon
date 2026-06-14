@@ -20,17 +20,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
-    // Vercel Ephemeral Storage Hack: Restore face descriptor from cookie if missing
-    if (!user.faceDescriptor?.length) {
-      const cookieStore = await cookies();
-      const cookieFace = cookieStore.get(`vercel_mock_face_${user.id}`)?.value;
-      if (cookieFace) {
-        try {
-          user.faceDescriptor = JSON.parse(cookieFace);
-          await store.updateUser(user.id, { faceDescriptor: user.faceDescriptor });
-        } catch {}
-      }
-    }
+
 
     // Mock credential check (plain-text for prototype simplicity)
     const validPassword =
