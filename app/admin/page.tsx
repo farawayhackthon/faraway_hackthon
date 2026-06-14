@@ -178,7 +178,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Stats */}
-        <div className="anim-fade-up anim-delay-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 28 }}>
+        <div className="anim-fade-up anim-delay-1 stats-grid">
           {stats.map((s, i) => (
             <div key={i} className="stat-card">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -214,7 +214,7 @@ export default function AdminDashboard() {
             </div>
 
             <form onSubmit={handleUpload}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+              <div className="form-row-2col">
                 <div>
                   <label className="field-label" htmlFor="exam-title">Exam Title *</label>
                   <input id="exam-title" className="input" placeholder="e.g. Advanced Mathematics — Paper 1" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} required />
@@ -230,7 +230,7 @@ export default function AdminDashboard() {
                 <input id="exam-time" className="input" type="datetime-local" min={minExamTime()} value={form.examTime} onChange={e => setForm(f => ({ ...f, examTime: e.target.value }))} required />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+              <div className="form-row-2col">
                 <div>
                   <label className="field-label" htmlFor="center-head-select">Assign Center Head *</label>
                   <select id="center-head-select" className="input" value={form.centerHeadId} onChange={e => setForm(f => ({ ...f, centerHeadId: e.target.value }))} required>

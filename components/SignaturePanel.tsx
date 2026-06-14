@@ -74,7 +74,7 @@ export default function SignaturePanel({
       </div>
 
       {/* Gates */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
+      <div className="gates-grid">
         <div className={`gate-box ${gate1Pass || isDecrypted ? 'gate-unlocked' : 'gate-locked'}`}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <span style={{ display: 'flex', alignItems: 'center' }}>

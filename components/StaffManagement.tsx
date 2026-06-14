@@ -105,7 +105,7 @@ export default function StaffManagement({ users, authFetch, onUpdated, onToast }
 
       {open && (
         <form onSubmit={handleCreate} style={{ marginBottom: 24, padding: 20, borderRadius: 10, background: '#f8fafc', border: '1px solid var(--border)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+          <div className="form-row-2col">
             <div>
               <label className="field-label" htmlFor="staff-name">Full Name *</label>
               <input id="staff-name" className="input" placeholder="e.g. Prof. Anita Sharma" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
@@ -115,7 +115,7 @@ export default function StaffManagement({ users, authFetch, onUpdated, onToast }
               <input id="staff-username" className="input" placeholder="e.g. anita.sharma" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value.toLowerCase() }))} required />
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 16 }}>
+          <div className="form-row-3col">
             <div>
               <label className="field-label" htmlFor="staff-password">Password *</label>
               <input id="staff-password" className="input" type="password" placeholder="Min. 6 characters" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required minLength={6} />

@@ -110,7 +110,7 @@ export default function LoginPage() {
         </div>
 
         {/* Two-panel layout */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28, alignItems: 'start' }}>
+        <div className="login-layout">
 
           {/* Left — Role picker */}
           <div className="anim-fade-up anim-delay-1">

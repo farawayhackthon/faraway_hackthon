@@ -668,7 +668,7 @@ export default function CenterPage() {
         )}
 
         {/* Two-column layout: Exam List + Detail Panel */}
-        <div className="anim-fade-up anim-delay-1" style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 24, alignItems: 'start' }}>
+        <div className="anim-fade-up anim-delay-1 portal-layout">
 
           {/* ── Left: Exam List ── */}
           <div>
@@ -775,7 +775,7 @@ export default function CenterPage() {
 
                   <div className="divider" style={{ marginBottom: 16 }} />
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+                  <div className="form-row-3col" style={{ marginBottom: 0 }}>
                     <div>
                       <span className="section-label" style={{ display: 'block', marginBottom: 6 }}>Exam Time</span>
                       <span style={{ fontSize: 13, color: 'var(--text-1)' }}>{new Date(selectedExam.examTime).toLocaleString('en-IN')}</span>

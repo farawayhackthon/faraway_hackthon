@@ -66,7 +66,7 @@ export default function Navbar({ user, onNotification }: NavbarProps) {
             onClick={() => { clearAuth(); router.push('/'); }}
           >
             <LogOut size={16} />
-            Sign Out
+            <span className="navbar-signout-text">Sign Out</span>
           </button>
         </div>
       </div>
