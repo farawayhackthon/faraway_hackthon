@@ -8,8 +8,32 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
-const DATA_FILE = path.join(process.cwd(), '.mock-store.json');
+function getStoragePath(): string {
+  const isServerless = 
+    process.env.VERCEL || 
+    process.env.AWS_LAMBDA_FUNCTION_NAME || 
+    process.env.LAMBDA_TASK_ROOT || 
+    process.env.NETLIFY ||
+    process.env.NODE_ENV === 'production';
+
+  if (isServerless) {
+    return path.join(os.tmpdir(), '.mock-store.json');
+  }
+
+  const localPath = path.join(process.cwd(), '.mock-store.json');
+  try {
+    const testFile = path.join(process.cwd(), '.write-test');
+    fs.writeFileSync(testFile, 'test');
+    fs.unlinkSync(testFile);
+    return localPath;
+  } catch {
+    return path.join(os.tmpdir(), '.mock-store.json');
+  }
+}
+
+const DATA_FILE = getStoragePath();
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -172,7 +196,11 @@ class MockStore {
   }
 
   private save(data?: StoreData): void {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data ?? this.data, null, 2), 'utf8');
+    try {
+      fs.writeFileSync(DATA_FILE, JSON.stringify(data ?? this.data, null, 2), 'utf8');
+    } catch (err) {
+      console.error('Failed to write mock database file:', err);
+    }
   }
 
   // Users
