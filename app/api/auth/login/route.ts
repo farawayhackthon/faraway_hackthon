@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { getStore } from '@/lib/store';
 import { signToken } from '@/lib/jwt';
 import { MOCK_CREDENTIALS } from '@/lib/credentials';
@@ -18,17 +17,6 @@ export async function POST(request: Request) {
 
     if (!user) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
-    }
-
-    // Vercel Ephemeral Storage Hack: Restore face descriptor from cookie if missing
-    if (!user.faceDescriptor?.length) {
-      const cookieFace = cookies().get(`vercel_mock_face_${user.id}`)?.value;
-      if (cookieFace) {
-        try {
-          user.faceDescriptor = JSON.parse(cookieFace);
-          store.updateUser(user.id, { faceDescriptor: user.faceDescriptor });
-        } catch {}
-      }
     }
 
     // Mock credential check (plain-text for prototype simplicity)
