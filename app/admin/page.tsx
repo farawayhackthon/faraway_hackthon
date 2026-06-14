@@ -159,12 +159,12 @@ export default function AdminDashboard() {
       <main style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
 
         {/* Page header */}
-        <div className="anim-fade-up" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 32 }}>
+        <div className="anim-fade-up dashboard-header">
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4, letterSpacing: '-0.02em' }}>Admin Dashboard</h1>
             <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Manage exam papers, encryption, and personnel assignment</p>
           </div>
-          <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+          <div className="dashboard-header-actions">
             <Link href="/admin/audit" className="btn btn-ghost" style={{ textDecoration: 'none' }}>
               <Clipboard size={15} /> Audit Log
             </Link>

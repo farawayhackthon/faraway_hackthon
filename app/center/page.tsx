@@ -585,7 +585,7 @@ export default function CenterPage() {
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
 
         {/* Page Header */}
-        <div className="anim-fade-up" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, marginBottom: 24 }}>
+        <div className="anim-fade-up dashboard-header" style={{ marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: myRole === 'center_head' ? '#eef2f7' : '#ecfdf5', border: `1px solid ${myRole === 'center_head' ? '#d5dae2' : 'rgba(22,163,74,0.15)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               {myRole === 'center_head' ? <Key size={20} color="var(--navy)" /> : <Pen size={20} color="#16a34a" />}

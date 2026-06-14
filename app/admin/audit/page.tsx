@@ -108,7 +108,7 @@ export default function AdminAuditPage() {
       <Navbar user={user} />
 
       <main style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 28 }}>
+        <div className="anim-fade-up dashboard-header">
           <div>
             <Link href="/admin" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-3)', marginBottom: 10, textDecoration: 'none' }}>
               <ArrowLeft size={14} /> Back to Dashboard
@@ -118,12 +118,14 @@ export default function AdminAuditPage() {
               Immutable timeline of uploads, signatures, face verification, and paper release events.
             </p>
           </div>
-          <button type="button" className="btn btn-ghost" onClick={exportCsv} disabled={logs.length === 0}>
-            <Download size={14} /> Export CSV
-          </button>
+          <div className="dashboard-header-actions">
+            <button type="button" className="btn btn-ghost" onClick={exportCsv} disabled={logs.length === 0}>
+              <Download size={14} /> Export CSV
+            </button>
+          </div>
         </div>
 
-        <div className="card" style={{ padding: 16, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="card filter-card">
           <Filter size={16} color="var(--text-3)" />
           <label htmlFor="audit-filter" className="field-label" style={{ marginBottom: 0, whiteSpace: 'nowrap' }}>Filter by exam</label>
           <select
