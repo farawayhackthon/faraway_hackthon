@@ -18,9 +18,10 @@ export async function GET(request: Request) {
     const examId = searchParams.get('examId');
 
     const store = getStore();
-    const logs = examId ? store.getAuditLogsForExam(examId) : store.getAuditLogs();
+    const logs = examId ? await store.getAuditLogsForExam(examId) : await store.getAuditLogs();
 
-    const exams = store.getExams().map(e => ({
+    const allExams = await store.getExams();
+    const exams = allExams.map(e => ({
       id: e.id,
       title: e.title,
       subject: e.subject,

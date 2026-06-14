@@ -16,8 +16,8 @@ export async function GET(request: Request) {
     }
 
     const store = getStore();
-    const notifications = store.getNotificationsForUser(payload.userId);
-    const unreadCount = store.getUnreadNotificationCount(payload.userId);
+    const notifications = await store.getNotificationsForUser(payload.userId);
+    const unreadCount = await store.getUnreadNotificationCount(payload.userId);
 
     return NextResponse.json({ notifications, unreadCount });
   } catch (err) {
@@ -43,17 +43,17 @@ export async function PATCH(request: Request) {
     const store = getStore();
 
     if (body.markAll) {
-      store.markAllNotificationsRead(payload.userId);
+      await store.markAllNotificationsRead(payload.userId);
       return NextResponse.json({ success: true });
     }
 
     if (Array.isArray(body.ids) && body.ids.length > 0) {
       for (const id of body.ids) {
-        store.markNotificationRead(id, payload.userId);
+        await store.markNotificationRead(id, payload.userId);
       }
       return NextResponse.json({
         success: true,
-        unreadCount: store.getUnreadNotificationCount(payload.userId),
+        unreadCount: await store.getUnreadNotificationCount(payload.userId),
       });
     }
 

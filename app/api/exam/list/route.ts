@@ -18,16 +18,16 @@ export async function GET(request: Request) {
     }
 
     const store = getStore();
-    const exams = store.getExamsForUser(payload.userId, payload.role);
+    const exams = await store.getExamsForUser(payload.userId, payload.role);
 
     // Compute live status for each exam and strip sensitive fields for non-admins
-    const enriched = exams.map(exam => {
+    const enriched = await Promise.all(exams.map(async (exam) => {
       const computed = store.computeExamStatus(exam);
 
       // Get assigned user names
-      const ch = store.getUserById(exam.centerHeadId);
-      const inv = store.getUserById(exam.invigilatorId);
-      const uploader = store.getUserById(exam.uploadedBy);
+      const ch = await store.getUserById(exam.centerHeadId);
+      const inv = await store.getUserById(exam.invigilatorId);
+      const uploader = await store.getUserById(exam.uploadedBy);
 
       return {
         id: exam.id,
@@ -48,7 +48,7 @@ export async function GET(request: Request) {
         releaseAudit: exam.releaseAudit ?? null,
         printCount: exam.printCount ?? 0,
       };
-    });
+    }));
 
     return NextResponse.json({ exams: enriched });
   } catch (err) {

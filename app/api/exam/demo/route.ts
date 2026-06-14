@@ -27,8 +27,8 @@ export async function POST(request: Request) {
     const minutesFromNow = body.minutesFromNow ?? 4; // default: 4 min (signing window open immediately)
 
     const store = getStore();
-    const pruned = store.pruneExpiredDemoExams();
-    const users = store.getUsers();
+    const pruned = await store.pruneExpiredDemoExams();
+    const users = await store.getUsers();
     const centerHeads = users.filter(u => u.role === 'center_head');
     const invigilators = users.filter(u => u.role === 'invigilator');
 
@@ -131,10 +131,10 @@ Do not turn over until instructed by the invigilator.`;
       originalFilename: 'advanced_math_paper_1.txt',
     };
 
-    store.addExam(examRecord);
+    await store.addExam(examRecord);
 
-    const admin = store.getUserById(payload.userId);
-    logAudit({
+    const admin = await store.getUserById(payload.userId);
+    await logAudit({
       examId: examRecord.id,
       examTitle: examRecord.title,
       event: 'exam_uploaded',

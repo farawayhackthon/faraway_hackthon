@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     }
 
     const store = getStore();
-    const exam = store.getExamById(examId);
+    const exam = await store.getExamById(examId);
 
     if (!exam) {
       return NextResponse.json({ error: 'Exam not found' }, { status: 404 });
@@ -84,16 +84,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Admins cannot sign exams' }, { status: 403 });
     }
 
-    const updated = store.updateExam(examId, updates);
+    const updated = await store.updateExam(examId, updates);
     if (!updated) {
       return NextResponse.json({ error: 'Failed to update exam' }, { status: 500 });
     }
 
     // Check if both signatures are now collected
     const bothSigned = updated.signatures.centerHead && updated.signatures.invigilator;
-    const signer = store.getUserById(payload.userId);
+    const signer = await store.getUserById(payload.userId);
 
-    logAudit({
+    await logAudit({
       examId: exam.id,
       examTitle: exam.title,
       event: payload.role === 'center_head' ? 'signature_center_head' : 'signature_invigilator',

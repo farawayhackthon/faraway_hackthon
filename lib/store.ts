@@ -1,55 +1,29 @@
-/**
- * Mock Decentralized Store — simulates IPFS-style content-addressed storage
- * In production, this would be replaced with actual IPFS or a blockchain-backed store.
- * 
- * Data is kept in-memory (server-side singleton) for the prototype.
- * For persistence across restarts, serialise to disk (JSON file approach shown below).
- */
-
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-
-function getStoragePath(): string {
-  const isServerless = 
-    process.env.VERCEL || 
-    process.env.AWS_LAMBDA_FUNCTION_NAME || 
-    process.env.LAMBDA_TASK_ROOT || 
-    process.env.NETLIFY ||
-    process.env.NODE_ENV === 'production';
-
-  if (isServerless) {
-    return path.join(os.tmpdir(), '.mock-store.json');
-  }
-
-  const localPath = path.join(process.cwd(), '.mock-store.json');
-  return localPath;
-}
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import clientPromise from './mongodb';
+import { v4 as uuidv4 } from 'uuid';
+import { Collection, Db } from 'mongodb';
 
 export interface User {
   id: string;
   username: string;
-  passwordHash: string; // bcrypt hash
+  passwordHash: string;
   role: 'admin' | 'center_head' | 'invigilator';
   name: string;
   centerId?: string;
-  faceDescriptor?: number[]; // 128-dim face embedding for biometric verification
+  faceDescriptor?: number[];
   faceEnrolledAt?: string;
-  passwordPlain?: string; // prototype-only credential for admin-created staff
+  passwordPlain?: string;
 }
 
 export interface ExamRecord {
   id: string;
   title: string;
   subject: string;
-  examTime: string;         // ISO 8601
+  examTime: string;
   centerHeadId: string;
   invigilatorId: string;
-  encryptedPayload: string; // base64 AES-GCM ciphertext (simulated IPFS CID content)
-  salt: string;             // PBKDF2 salt
-  encryptedKey: string;     // The AES key is itself encrypted and stored separately
+  encryptedPayload: string;
+  salt: string;
+  encryptedKey: string;
   keySalt: string;
   uploadedAt: string;
   status: 'scheduled' | 'window_open' | 'ready_to_decrypt' | 'decrypted' | 'expired';
@@ -59,8 +33,8 @@ export interface ExamRecord {
     invigilator: boolean;
     invigilatorAt?: string;
   };
-  decryptedContent?: string; // Only populated after successful multi-sig + time-lock
-  uploadedBy: string;        // admin user id
+  decryptedContent?: string;
+  uploadedBy: string;
   originalFilename?: string;
   releaseAudit?: {
     decryptedAt: string;
@@ -112,193 +86,161 @@ export interface NotificationRecord {
   read: boolean;
 }
 
-interface StoreData {
-  users: User[];
-  exams: ExamRecord[];
-  notifications: NotificationRecord[];
-  auditLogs: AuditLogEntry[];
+function getDefaultUsers(): User[] {
+  return [
+    {
+      id: 'user-admin-001',
+      username: 'admin',
+      passwordHash: '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4oR5K1.Bca',
+      role: 'admin',
+      name: 'Dr. Rajesh Kumar (Exam Board)',
+    },
+    {
+      id: 'user-ch-001',
+      username: 'centerhead',
+      passwordHash: '$2a$12$YYnr76blgqVHnEzKjuopQ.lX3VBW/H5K7Ul8HJbMNyV6bEjz6O4..',
+      role: 'center_head',
+      name: 'Prof. Anita Sharma (Center Head)',
+      centerId: 'center-001',
+    },
+    {
+      id: 'user-inv-001',
+      username: 'invigilator',
+      passwordHash: '$2a$12$dYt4f6WN8UoB3v2kHmP5S.h7z4T2ixiRG5BbYRQ8pBN9fBUNpLPOm',
+      role: 'invigilator',
+      name: 'Mr. Vikram Singh (Invigilator)',
+      centerId: 'center-001',
+    },
+    {
+      id: '9d967805-4a17-4ea5-8d78-539a95350a7b',
+      username: 'vedantlakhotia',
+      passwordHash: '',
+      passwordPlain: 'paradox',
+      role: 'center_head',
+      name: 'Vedant Lakhotia',
+      centerId: 'center-001',
+    }
+  ];
 }
 
-// ─── Default Seed Data ────────────────────────────────────────────────────────
-
-function getDefaultData(): StoreData {
-  return {
-    users: [
-      {
-        id: 'user-admin-001',
-        username: 'admin',
-        // Password: Admin@123
-        passwordHash: '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4oR5K1.Bca',
-        role: 'admin',
-        name: 'Dr. Rajesh Kumar (Exam Board)',
-      },
-      {
-        id: 'user-ch-001',
-        username: 'centerhead',
-        // Password: Center@123
-        passwordHash: '$2a$12$YYnr76blgqVHnEzKjuopQ.lX3VBW/H5K7Ul8HJbMNyV6bEjz6O4..',
-        role: 'center_head',
-        name: 'Prof. Anita Sharma (Center Head)',
-        centerId: 'center-001',
-      },
-      {
-        id: 'user-inv-001',
-        username: 'invigilator',
-        // Password: Invigil@123
-        passwordHash: '$2a$12$dYt4f6WN8UoB3v2kHmP5S.h7z4T2ixiRG5BbYRQ8pBN9fBUNpLPOm',
-        role: 'invigilator',
-        name: 'Mr. Vikram Singh (Invigilator)',
-        centerId: 'center-001',
-      },
-      {
-        id: '9d967805-4a17-4ea5-8d78-539a95350a7b',
-        username: 'vedantlakhotia',
-        passwordHash: '',
-        passwordPlain: 'paradox',
-        role: 'center_head',
-        name: 'Vedant Lakhotia',
-        centerId: 'center-001',
-      }
-    ],
-    exams: [],
-    notifications: [],
-    auditLogs: [],
-  };
-}
-
-// ─── Store Implementation ─────────────────────────────────────────────────────
-
-class MockStore {
-  private data: StoreData;
-  private lastMtime: number = 0;
-
-  constructor() {
-    this.data = this.load();
+export class MongoStore {
+  private async getDb(): Promise<Db> {
+    const client = await clientPromise;
+    return client.db('examss_db');
   }
 
-  private sync(): void {
-    const dbPath = getStoragePath();
-    try {
-      const stats = fs.statSync(dbPath);
-      if (stats.mtimeMs > this.lastMtime) {
-        this.data = this.load();
-      }
-    } catch {
-      // Ignore stat errors
-    }
+  private async getUsersCollection(): Promise<Collection<User>> {
+    const db = await this.getDb();
+    return db.collection<User>('users');
   }
 
-  private load(): StoreData {
-    const dbPath = getStoragePath();
-    try {
-      if (fs.existsSync(dbPath)) {
-        const raw = fs.readFileSync(dbPath, 'utf8');
-        try {
-          const parsed = JSON.parse(raw) as Partial<StoreData>;
-          this.lastMtime = fs.statSync(dbPath).mtimeMs;
-          return {
-            users: parsed.users ?? getDefaultData().users,
-            exams: parsed.exams ?? [],
-            notifications: parsed.notifications ?? [],
-            auditLogs: parsed.auditLogs ?? [],
-          };
-        } catch (parseErr) {
-          console.error('JSON Parse error on mock database. Returning in-memory data to avoid wipe.', parseErr);
-          return this.data || getDefaultData();
-        }
-      }
-    } catch (err) {
-      console.error('File read error (possibly locked by Windows):', err);
-      // Do not overwrite the DB if we just hit a lock!
-      return this.data || getDefaultData();
-    }
-    
-    // File doesn't exist, create it with defaults
-    const defaults = getDefaultData();
-    this.save(defaults);
-    return defaults;
+  private async getExamsCollection(): Promise<Collection<ExamRecord>> {
+    const db = await this.getDb();
+    return db.collection<ExamRecord>('exams');
   }
 
-  private save(data?: StoreData): void {
-    const dbPath = getStoragePath();
-    const tmpPath = dbPath + '.tmp';
-    try {
-      fs.writeFileSync(tmpPath, JSON.stringify(data ?? this.data, null, 2), 'utf8');
-      fs.renameSync(tmpPath, dbPath);
-      this.lastMtime = fs.statSync(dbPath).mtimeMs;
-    } catch (err) {
-      console.error('Failed to write mock database file:', err);
+  private async getNotificationsCollection(): Promise<Collection<NotificationRecord>> {
+    const db = await this.getDb();
+    return db.collection<NotificationRecord>('notifications');
+  }
+
+  private async getAuditLogsCollection(): Promise<Collection<AuditLogEntry>> {
+    const db = await this.getDb();
+    return db.collection<AuditLogEntry>('auditLogs');
+  }
+
+  async init(): Promise<void> {
+    const users = await this.getUsersCollection();
+    const count = await users.countDocuments();
+    if (count === 0) {
+      await users.insertMany(getDefaultUsers() as any);
     }
   }
 
   // Users
-  getUsers(): User[] { this.sync(); return this.data.users; }
-  getUserById(id: string): User | undefined { this.sync(); return this.data.users.find(u => u.id === id); }
-  getUserByUsername(username: string): User | undefined {
-    this.sync();
-    return this.data.users.find(u => u.username === username);
+  async getUsers(): Promise<User[]> {
+    const col = await this.getUsersCollection();
+    const docs = await col.find({}).toArray();
+    return docs.map(d => ({ ...d, _id: undefined } as any));
   }
 
-  updateUser(id: string, updates: Partial<User>): User | null {
-    this.sync();
-    const idx = this.data.users.findIndex(u => u.id === id);
-    if (idx === -1) return null;
-    this.data.users[idx] = { ...this.data.users[idx], ...updates };
-    this.save();
-    return this.data.users[idx];
+  async getUserById(id: string): Promise<User | undefined> {
+    const col = await this.getUsersCollection();
+    const doc = await col.findOne({ id });
+    return doc ? { ...doc, _id: undefined } as any : undefined;
   }
 
-  addUser(user: User): User {
-    this.sync();
-    this.data.users.push(user);
-    this.save();
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const col = await this.getUsersCollection();
+    const doc = await col.findOne({ username });
+    return doc ? { ...doc, _id: undefined } as any : undefined;
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<User | null> {
+    const col = await this.getUsersCollection();
+    const result = await col.findOneAndUpdate(
+      { id },
+      { $set: updates },
+      { returnDocument: 'after' }
+    );
+    return result ? { ...result, _id: undefined } as any : null;
+  }
+
+  async addUser(user: User): Promise<User> {
+    const col = await this.getUsersCollection();
+    await col.insertOne(user as any);
     return user;
   }
 
-  resetUserFace(id: string): User | null {
-    return this.updateUser(id, {
-      faceDescriptor: undefined,
-      faceEnrolledAt: undefined,
-    });
+  async resetUserFace(id: string): Promise<User | null> {
+    const col = await this.getUsersCollection();
+    const result = await col.findOneAndUpdate(
+      { id },
+      { $unset: { faceDescriptor: "", faceEnrolledAt: "" } },
+      { returnDocument: 'after' }
+    );
+    return result ? { ...result, _id: undefined } as any : null;
   }
 
   // Exams
-  getExams(): ExamRecord[] { this.sync(); return this.data.exams; }
-  getExamById(id: string): ExamRecord | undefined { this.sync(); return this.data.exams.find(e => e.id === id); }
-
-  addExam(exam: ExamRecord): void {
-    this.sync();
-    this.data.exams.push(exam);
-    this.save();
+  async getExams(): Promise<ExamRecord[]> {
+    const col = await this.getExamsCollection();
+    const docs = await col.find({}).toArray();
+    return docs.map(d => ({ ...d, _id: undefined } as any));
   }
 
-  updateExam(id: string, updates: Partial<ExamRecord>): ExamRecord | null {
-    this.sync();
-    const idx = this.data.exams.findIndex(e => e.id === id);
-    if (idx === -1) return null;
-    this.data.exams[idx] = { ...this.data.exams[idx], ...updates };
-    this.save();
-    return this.data.exams[idx];
+  async getExamById(id: string): Promise<ExamRecord | undefined> {
+    const col = await this.getExamsCollection();
+    const doc = await col.findOne({ id });
+    return doc ? { ...doc, _id: undefined } as any : undefined;
   }
 
-  /**
-   * Get exams visible to a given user (center head or invigilator sees only their assigned exams)
-   */
-  getExamsForUser(userId: string, role: string): ExamRecord[] {
-    this.sync();
-    if (role === 'admin') return this.data.exams;
-    if (role === 'center_head') {
-      return this.data.exams.filter(e => e.centerHeadId === userId);
-    }
-    if (role === 'invigilator') {
-      return this.data.exams.filter(e => e.invigilatorId === userId);
-    }
-    return [];
+  async addExam(exam: ExamRecord): Promise<void> {
+    const col = await this.getExamsCollection();
+    await col.insertOne(exam as any);
   }
 
-  /**
-   * Compute live status based on current time (does NOT mutate — just returns computed status)
-   */
+  async updateExam(id: string, updates: Partial<ExamRecord>): Promise<ExamRecord | null> {
+    const col = await this.getExamsCollection();
+    const result = await col.findOneAndUpdate(
+      { id },
+      { $set: updates },
+      { returnDocument: 'after' }
+    );
+    return result ? { ...result, _id: undefined } as any : null;
+  }
+
+  async getExamsForUser(userId: string, role: string): Promise<ExamRecord[]> {
+    const col = await this.getExamsCollection();
+    let query = {};
+    if (role === 'center_head') query = { centerHeadId: userId };
+    else if (role === 'invigilator') query = { invigilatorId: userId };
+    else if (role !== 'admin') return [];
+
+    const docs = await col.find(query).toArray();
+    return docs.map(d => ({ ...d, _id: undefined } as any));
+  }
+
   computeExamStatus(exam: ExamRecord): {
     status: string;
     minutesUntilExam: number;
@@ -310,7 +252,7 @@ class MockStore {
     const diffMs = examTime.getTime() - now.getTime();
     const diffMin = diffMs / 60000;
 
-    const windowOpen = diffMin <= 5 && diffMin >= -30; // window: 5 min before to 30 min after
+    const windowOpen = diffMin <= 5 && diffMin >= -30;
     const expired = diffMin < -30;
 
     const bothSigned = exam.signatures.centerHead && exam.signatures.invigilator;
@@ -325,100 +267,75 @@ class MockStore {
   }
 
   // Notifications
-  addNotification(notification: NotificationRecord): void {
-    this.sync();
-    this.data.notifications.unshift(notification);
-    this.save();
+  async addNotification(notification: NotificationRecord): Promise<void> {
+    const col = await this.getNotificationsCollection();
+    await col.insertOne(notification as any);
   }
 
-  getNotificationsForUser(userId: string): NotificationRecord[] {
-    this.sync();
-    return this.data.notifications
-      .filter(n => n.userId === userId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  async getNotificationsForUser(userId: string): Promise<NotificationRecord[]> {
+    const col = await this.getNotificationsCollection();
+    const docs = await col.find({ userId }).sort({ createdAt: -1 }).toArray();
+    return docs.map(d => ({ ...d, _id: undefined } as any));
   }
 
-  getUnreadNotificationCount(userId: string): number {
-    this.sync();
-    return this.data.notifications.filter(n => n.userId === userId && !n.read).length;
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    const col = await this.getNotificationsCollection();
+    return col.countDocuments({ userId, read: false });
   }
 
-  markNotificationRead(id: string, userId: string): boolean {
-    this.sync();
-    const notification = this.data.notifications.find(n => n.id === id && n.userId === userId);
-    if (!notification || notification.read) return false;
-    notification.read = true;
-    this.save();
-    return true;
+  async markNotificationRead(id: string, userId: string): Promise<boolean> {
+    const col = await this.getNotificationsCollection();
+    const res = await col.updateOne({ id, userId, read: false }, { $set: { read: true } });
+    return res.modifiedCount > 0;
   }
 
-  markAllNotificationsRead(userId: string): void {
-    this.sync();
-    let changed = false;
-    for (const notification of this.data.notifications) {
-      if (notification.userId === userId && !notification.read) {
-        notification.read = true;
-        changed = true;
-      }
-    }
-    if (changed) this.save();
+  async markAllNotificationsRead(userId: string): Promise<void> {
+    const col = await this.getNotificationsCollection();
+    await col.updateMany({ userId, read: false }, { $set: { read: true } });
   }
 
   // Audit logs
-  addAuditLog(entry: AuditLogEntry): void {
-    this.sync();
-    this.data.auditLogs.unshift(entry);
-    this.save();
+  async addAuditLog(entry: AuditLogEntry): Promise<void> {
+    const col = await this.getAuditLogsCollection();
+    await col.insertOne(entry as any);
   }
 
-  getAuditLogs(): AuditLogEntry[] {
-    this.sync();
-    return [...this.data.auditLogs].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
+  async getAuditLogs(): Promise<AuditLogEntry[]> {
+    const col = await this.getAuditLogsCollection();
+    const docs = await col.find({}).sort({ createdAt: -1 }).toArray();
+    return docs.map(d => ({ ...d, _id: undefined } as any));
   }
 
-  getAuditLogsForExam(examId: string): AuditLogEntry[] {
-    return this.getAuditLogs().filter(e => e.examId === examId);
+  async getAuditLogsForExam(examId: string): Promise<AuditLogEntry[]> {
+    const col = await this.getAuditLogsCollection();
+    const docs = await col.find({ examId }).sort({ createdAt: -1 }).toArray();
+    return docs.map(d => ({ ...d, _id: undefined } as any));
   }
 
-  /** Remove expired demo exams to keep the store usable for live testing */
-  pruneExpiredDemoExams(): number {
-    this.sync();
-    const before = this.data.exams.length;
-    const expiredIds = new Set<string>();
+  async pruneExpiredDemoExams(): Promise<number> {
+    const col = await this.getExamsCollection();
+    const allDemos = await col.find({ title: { $regex: '^\\[DEMO\\]' } }).toArray();
+    const expiredIds = allDemos
+      .filter(exam => this.computeExamStatus(exam as any).expired)
+      .map(exam => exam.id);
 
-    this.data.exams = this.data.exams.filter(exam => {
-      if (!exam.title.startsWith('[DEMO]')) return true;
-      if (this.computeExamStatus(exam).expired) {
-        expiredIds.add(exam.id);
-        return false;
-      }
-      return true;
-    });
-
-    if (expiredIds.size > 0) {
-      this.data.notifications = this.data.notifications.filter(n => !n.examId || !expiredIds.has(n.examId));
-      this.save();
-    } else if (this.data.exams.length !== before) {
-      this.save();
+    if (expiredIds.length > 0) {
+      await col.deleteMany({ id: { $in: expiredIds } });
+      const notifCol = await this.getNotificationsCollection();
+      await notifCol.deleteMany({ examId: { $in: expiredIds } });
     }
-
-    return before - this.data.exams.length;
-  }
-
-  reset(): void {
-    this.data = getDefaultData();
-    this.save();
+    return expiredIds.length;
   }
 }
 
 // Singleton
-const globalForStore = globalThis as unknown as { storeInstance: MockStore | null };
+const globalForStore = globalThis as unknown as { storeInstance: MongoStore | null };
 
-export function getStore(): MockStore {
+export function getStore(): MongoStore {
   if (!globalForStore.storeInstance) {
-    globalForStore.storeInstance = new MockStore();
+    globalForStore.storeInstance = new MongoStore();
+    // Non-blocking initialization
+    globalForStore.storeInstance.init().catch(console.error);
   }
   return globalForStore.storeInstance;
 }

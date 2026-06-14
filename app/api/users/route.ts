@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     if (auth.error) return auth.error;
 
     const store = getStore();
-    const users = store.getUsers();
+    const users = await store.getUsers();
 
     return NextResponse.json({
       users: users.map(serializeStaffUser),
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
     }
 
     const store = getStore();
-    if (store.getUserByUsername(normalizedUsername)) {
+    if (await store.getUserByUsername(normalizedUsername)) {
       return NextResponse.json({ error: 'Username already exists' }, { status: 409 });
     }
 
@@ -91,12 +91,13 @@ export async function POST(request: Request) {
       centerId: centerId?.trim() || 'center-001',
     };
 
-    store.addUser(user);
+    await store.addUser(user);
     console.log(`[STAFF CREATE] Admin created ${role} "${user.name}" (${user.username})`);
 
-    const admins = store.getUsers().filter(u => u.role === 'admin');
+    const allUsers = await store.getUsers();
+    const admins = allUsers.filter(u => u.role === 'admin');
     for (const admin of admins) {
-      store.addNotification({
+      await store.addNotification({
         id: uuidv4(),
         userId: admin.id,
         type: 'staff_created',
@@ -130,7 +131,7 @@ export async function PATCH(request: Request) {
     }
 
     const store = getStore();
-    const existing = store.getUserById(userId);
+    const existing = await store.getUserById(userId);
     if (!existing) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
@@ -138,16 +139,17 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Cannot reset admin face profile' }, { status: 403 });
     }
 
-    const updated = store.resetUserFace(userId);
+    const updated = await store.resetUserFace(userId);
     if (!updated) {
       return NextResponse.json({ error: 'Failed to reset face profile' }, { status: 500 });
     }
 
     console.log(`[STAFF FACE RESET] Admin reset face for "${updated.name}"`);
 
-    const admins = store.getUsers().filter(u => u.role === 'admin');
+    const allUsers2 = await store.getUsers();
+    const admins = allUsers2.filter(u => u.role === 'admin');
     for (const admin of admins) {
-      store.addNotification({
+      await store.addNotification({
         id: uuidv4(),
         userId: admin.id,
         type: 'face_reset',
