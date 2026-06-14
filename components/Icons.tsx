@@ -30,6 +30,7 @@ export {
   Camera,
   Filter,
   UserPlus,
+  Info,
 } from 'lucide-react';
 
 // Clock is also used as AlarmClock in some components

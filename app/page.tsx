@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Shield, Key, Pen, LockShield, Lock, Eye, EyeOff, AlertTriangle, AlarmClock } from '@/components/Icons';
+import { Shield, Key, Pen, LockShield, Lock, Eye, EyeOff, AlertTriangle, AlarmClock, Info } from '@/components/Icons';
 import { getRole, getToken, setAuth } from '@/lib/auth-storage';
 import { ROLE_THEMES } from '@/lib/role-theme';
 
@@ -244,7 +244,15 @@ export default function LoginPage() {
 
                   {/* Password */}
                   <div>
-                    <label className="field-label" htmlFor="password">Password</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <label className="field-label" htmlFor="password" style={{ marginBottom: 0 }}>Password</label>
+                      <div className="tooltip-container">
+                        <Info />
+                        <div className="tooltip-content">
+                          Password is auto-filled and visible because the system is currently in testing phase.
+                        </div>
+                      </div>
+                    </div>
                     <div style={{ position: 'relative' }}>
                       <input
                         id="password"
