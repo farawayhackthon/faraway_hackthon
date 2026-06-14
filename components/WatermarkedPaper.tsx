@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import type { WatermarkMeta } from '@/lib/watermark';
 import { watermarkBannerText, watermarkRepeatText } from '@/lib/watermark';
 
@@ -22,6 +23,24 @@ export default function WatermarkedPaper({
 }: WatermarkedPaperProps) {
   const banner = watermarkBannerText(meta);
   const repeat = watermarkRepeatText(meta);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let urlToRevoke: string | null = null;
+    if (isPdf(content) && content.startsWith('data:')) {
+      fetch(content)
+        .then(res => res.blob())
+        .then(blob => {
+          urlToRevoke = URL.createObjectURL(blob);
+          setPdfUrl(urlToRevoke);
+        })
+        .catch(err => console.error('Failed to convert data URL to blob', err));
+      
+      return () => {
+        if (urlToRevoke) URL.revokeObjectURL(urlToRevoke);
+      };
+    }
+  }, [content, isPdf]);
 
   return (
     <div className="watermarked-paper">
@@ -38,7 +57,7 @@ export default function WatermarkedPaper({
         <div className="watermarked-paper-content">
           {isPdf(content) && (
             <iframe
-              src={content}
+              src={pdfUrl || ''}
               width="100%"
               height="800px"
               style={{ border: 'none', display: 'block', position: 'relative', zIndex: 1 }}

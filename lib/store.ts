@@ -168,9 +168,22 @@ function getDefaultData(): StoreData {
 
 class MockStore {
   private data: StoreData;
+  private lastMtime: number = 0;
 
   constructor() {
     this.data = this.load();
+  }
+
+  private sync(): void {
+    const dbPath = getStoragePath();
+    try {
+      const stats = fs.statSync(dbPath);
+      if (stats.mtimeMs > this.lastMtime) {
+        this.data = this.load();
+      }
+    } catch {
+      // Ignore stat errors
+    }
   }
 
   private load(): StoreData {
@@ -179,6 +192,7 @@ class MockStore {
       if (fs.existsSync(dbPath)) {
         const raw = fs.readFileSync(dbPath, 'utf8');
         const parsed = JSON.parse(raw) as Partial<StoreData>;
+        this.lastMtime = fs.statSync(dbPath).mtimeMs;
         return {
           users: parsed.users ?? getDefaultData().users,
           exams: parsed.exams ?? [],
@@ -198,21 +212,22 @@ class MockStore {
     const dbPath = getStoragePath();
     try {
       fs.writeFileSync(dbPath, JSON.stringify(data ?? this.data, null, 2), 'utf8');
+      this.lastMtime = fs.statSync(dbPath).mtimeMs;
     } catch (err) {
       console.error('Failed to write mock database file:', err);
     }
   }
 
   // Users
-  getUsers(): User[] { this.data = this.load(); return this.data.users; }
-  getUserById(id: string): User | undefined { this.data = this.load(); return this.data.users.find(u => u.id === id); }
+  getUsers(): User[] { this.sync(); return this.data.users; }
+  getUserById(id: string): User | undefined { this.sync(); return this.data.users.find(u => u.id === id); }
   getUserByUsername(username: string): User | undefined {
-    this.data = this.load();
+    this.sync();
     return this.data.users.find(u => u.username === username);
   }
 
   updateUser(id: string, updates: Partial<User>): User | null {
-    this.data = this.load();
+    this.sync();
     const idx = this.data.users.findIndex(u => u.id === id);
     if (idx === -1) return null;
     this.data.users[idx] = { ...this.data.users[idx], ...updates };
@@ -221,7 +236,7 @@ class MockStore {
   }
 
   addUser(user: User): User {
-    this.data = this.load();
+    this.sync();
     this.data.users.push(user);
     this.save();
     return user;
@@ -235,17 +250,17 @@ class MockStore {
   }
 
   // Exams
-  getExams(): ExamRecord[] { this.data = this.load(); return this.data.exams; }
-  getExamById(id: string): ExamRecord | undefined { this.data = this.load(); return this.data.exams.find(e => e.id === id); }
+  getExams(): ExamRecord[] { this.sync(); return this.data.exams; }
+  getExamById(id: string): ExamRecord | undefined { this.sync(); return this.data.exams.find(e => e.id === id); }
 
   addExam(exam: ExamRecord): void {
-    this.data = this.load();
+    this.sync();
     this.data.exams.push(exam);
     this.save();
   }
 
   updateExam(id: string, updates: Partial<ExamRecord>): ExamRecord | null {
-    this.data = this.load();
+    this.sync();
     const idx = this.data.exams.findIndex(e => e.id === id);
     if (idx === -1) return null;
     this.data.exams[idx] = { ...this.data.exams[idx], ...updates };
@@ -257,7 +272,7 @@ class MockStore {
    * Get exams visible to a given user (center head or invigilator sees only their assigned exams)
    */
   getExamsForUser(userId: string, role: string): ExamRecord[] {
-    this.data = this.load();
+    this.sync();
     if (role === 'admin') return this.data.exams;
     if (role === 'center_head') {
       return this.data.exams.filter(e => e.centerHeadId === userId);
@@ -298,25 +313,25 @@ class MockStore {
 
   // Notifications
   addNotification(notification: NotificationRecord): void {
-    this.data = this.load();
+    this.sync();
     this.data.notifications.unshift(notification);
     this.save();
   }
 
   getNotificationsForUser(userId: string): NotificationRecord[] {
-    this.data = this.load();
+    this.sync();
     return this.data.notifications
       .filter(n => n.userId === userId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
   getUnreadNotificationCount(userId: string): number {
-    this.data = this.load();
+    this.sync();
     return this.data.notifications.filter(n => n.userId === userId && !n.read).length;
   }
 
   markNotificationRead(id: string, userId: string): boolean {
-    this.data = this.load();
+    this.sync();
     const notification = this.data.notifications.find(n => n.id === id && n.userId === userId);
     if (!notification || notification.read) return false;
     notification.read = true;
@@ -325,7 +340,7 @@ class MockStore {
   }
 
   markAllNotificationsRead(userId: string): void {
-    this.data = this.load();
+    this.sync();
     let changed = false;
     for (const notification of this.data.notifications) {
       if (notification.userId === userId && !notification.read) {
@@ -338,13 +353,13 @@ class MockStore {
 
   // Audit logs
   addAuditLog(entry: AuditLogEntry): void {
-    this.data = this.load();
+    this.sync();
     this.data.auditLogs.unshift(entry);
     this.save();
   }
 
   getAuditLogs(): AuditLogEntry[] {
-    this.data = this.load();
+    this.sync();
     return [...this.data.auditLogs].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
@@ -356,7 +371,7 @@ class MockStore {
 
   /** Remove expired demo exams to keep the store usable for live testing */
   pruneExpiredDemoExams(): number {
-    this.data = this.load();
+    this.sync();
     const before = this.data.exams.length;
     const expiredIds = new Set<string>();
 
@@ -386,11 +401,11 @@ class MockStore {
 }
 
 // Singleton
-let storeInstance: MockStore | null = null;
+const globalForStore = globalThis as unknown as { storeInstance: MockStore | null };
 
 export function getStore(): MockStore {
-  if (!storeInstance) {
-    storeInstance = new MockStore();
+  if (!globalForStore.storeInstance) {
+    globalForStore.storeInstance = new MockStore();
   }
-  return storeInstance;
+  return globalForStore.storeInstance;
 }

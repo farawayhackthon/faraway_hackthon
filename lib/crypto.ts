@@ -9,7 +9,7 @@ const KEY_LENGTH = 32; // 256 bits
  * Derives a 256-bit key from a passphrase using PBKDF2
  */
 export function deriveKey(passphrase: string, salt: string): Buffer {
-  return crypto.pbkdf2Sync(passphrase, salt, 100000, KEY_LENGTH, 'sha512');
+  return crypto.pbkdf2Sync(passphrase, salt, 1000, KEY_LENGTH, 'sha512');
 }
 
 /**

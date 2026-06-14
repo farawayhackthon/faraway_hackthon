@@ -79,7 +79,14 @@ export default function AdminDashboard() {
       const payload = { ...form, examTime: new Date(form.examTime).toISOString() };
       const res = await authFetch('/api/exam/upload', { method: 'POST', body: JSON.stringify(payload) });
       const d = await res.json();
-      if (res.ok) { showToast('success', d.message); setUploadOpen(false); setForm(EMPTY_FORM); fetchExams(); }
+      if (res.ok) { 
+        showToast('success', d.message); 
+        setUploadOpen(false); 
+        setForm(EMPTY_FORM); 
+        fetchExams(); 
+        const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
+      }
       else showToast('error', d.error);
     } catch { showToast('error', 'Network error. Please try again.'); }
     finally { setUploadLoading(false); }
@@ -248,8 +255,16 @@ export default function AdminDashboard() {
               </div>
 
               <div style={{ marginBottom: 16 }}>
-                <label className="field-label" htmlFor="file-upload">Upload file (txt / pdf) — optional</label>
-                <input id="file-upload" className="input" type="file" accept=".txt,.pdf,.doc,.docx" onChange={handleFileRead} style={{ height: 'auto', padding: '10px 14px', cursor: 'pointer' }} />
+                <label className="field-label">Upload file (txt / pdf) — optional</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <label htmlFor="file-upload" className="btn btn-ghost" style={{ cursor: 'pointer', margin: 0 }}>
+                    <Upload size={15} /> Choose File
+                  </label>
+                  <input id="file-upload" type="file" accept=".txt,.pdf,.doc,.docx" onChange={handleFileRead} style={{ display: 'none' }} />
+                  <span style={{ fontSize: 13, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '250px' }}>
+                    {form.filename !== 'exam-paper.txt' ? form.filename : 'No file chosen'}
+                  </span>
+                </div>
                 <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 5 }}>Binary files (PDFs, images) are securely converted to encrypted blobs.</p>
               </div>
 
