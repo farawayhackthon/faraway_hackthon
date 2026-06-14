@@ -150,6 +150,15 @@ function getDefaultData(): StoreData {
         name: 'Mr. Vikram Singh (Invigilator)',
         centerId: 'center-001',
       },
+      {
+        id: '9d967805-4a17-4ea5-8d78-539a95350a7b',
+        username: 'vedantlakhotia',
+        passwordHash: '',
+        passwordPlain: 'paradox',
+        role: 'center_head',
+        name: 'Vedant Lakhotia',
+        centerId: 'center-001',
+      }
     ],
     exams: [],
     notifications: [],
@@ -198,9 +207,13 @@ class MockStore {
           return this.data || getDefaultData();
         }
       }
-    } catch {
-      // Ignored
+    } catch (err) {
+      console.error('File read error (possibly locked by Windows):', err);
+      // Do not overwrite the DB if we just hit a lock!
+      return this.data || getDefaultData();
     }
+    
+    // File doesn't exist, create it with defaults
     const defaults = getDefaultData();
     this.save(defaults);
     return defaults;
