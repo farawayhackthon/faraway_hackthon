@@ -3,6 +3,7 @@ import { getStore } from '@/lib/store';
 import { verifyToken } from '@/lib/jwt';
 import { averageDescriptors, facesMatch, signFaceVerificationToken } from '@/lib/face';
 import { logAudit } from '@/lib/audit';
+import { v4 as uuidv4 } from 'uuid';
 
 function requireStaff(payload: ReturnType<typeof verifyToken>) {
   if (!payload) return { error: 'Invalid token', status: 401 as const };
@@ -89,6 +90,20 @@ export async function POST(request: Request) {
         ? `${updated.name} updated their face profile.`
         : `${updated.name} enrolled their face profile.`,
     });
+
+    const admins = store.getUsers().filter(u => u.role === 'admin');
+    for (const admin of admins) {
+      store.addNotification({
+        id: uuidv4(),
+        userId: admin.id,
+        type: 'face_enrolled',
+        message: wasEnrolled
+          ? `Staff "${updated.name}" (${updated.role === 'center_head' ? 'Center Head' : 'Invigilator'}) updated their face profile.`
+          : `Staff "${updated.name}" (${updated.role === 'center_head' ? 'Center Head' : 'Invigilator'}) enrolled their face profile.`,
+        createdAt: new Date().toISOString(),
+        read: false,
+      });
+    }
 
     console.log(`[FACE ${wasEnrolled ? 'RE-ENROLL' : 'ENROLL'}] User ${updated.name} enrolled face biometrics`);
 

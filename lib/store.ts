@@ -86,12 +86,12 @@ export interface AuditLogEntry {
 export interface NotificationRecord {
   id: string;
   userId: string;
-  type: 'exam_decrypted';
-  examId: string;
-  examTitle: string;
-  subject: string;
-  decryptedBy: string;
-  decryptedByRole: string;
+  type: 'exam_decrypted' | 'staff_created' | 'face_enrolled' | 'face_reset';
+  examId?: string;
+  examTitle?: string;
+  subject?: string;
+  decryptedBy?: string;
+  decryptedByRole?: string;
   message: string;
   createdAt: string;
   read: boolean;
@@ -342,7 +342,7 @@ class MockStore {
     });
 
     if (expiredIds.size > 0) {
-      this.data.notifications = this.data.notifications.filter(n => !expiredIds.has(n.examId));
+      this.data.notifications = this.data.notifications.filter(n => !n.examId || !expiredIds.has(n.examId));
       this.save();
     } else if (this.data.exams.length !== before) {
       this.save();

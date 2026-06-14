@@ -20,6 +20,9 @@ export const metadata: Metadata = {
   title: "SecureExam — Anti-Leak Exam Distribution System",
   description: "A cryptographically secured, multi-signature exam paper distribution system with AES-256 encryption and time-lock mechanisms.",
   keywords: "exam security, encrypted exam, anti-leak, multi-signature, time-lock",
+  icons: {
+    icon: "/favicon.png",
+  },
 };
 
 export default function RootLayout({

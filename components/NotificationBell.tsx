@@ -1,16 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bell, LockOpen } from '@/components/Icons';
+import { Bell, LockOpen, UserPlus, ScanFace } from '@/components/Icons';
 import { getToken } from '@/lib/auth-storage';
 
 interface Notification {
   id: string;
-  examId: string;
-  examTitle: string;
-  subject: string;
-  decryptedBy: string;
-  decryptedByRole: string;
+  type?: 'exam_decrypted' | 'staff_created' | 'face_enrolled' | 'face_reset';
+  examId?: string;
+  examTitle?: string;
+  subject?: string;
+  decryptedBy?: string;
+  decryptedByRole?: string;
   message: string;
   createdAt: string;
   read: boolean;
@@ -115,6 +116,42 @@ export default function NotificationBell({ onNewNotification, variant = 'light',
     }
   };
 
+  const [activeTab, setActiveTab] = useState<'exam' | 'staff'>('exam');
+
+  const examNotifications = notifications.filter(n => !n.type || n.type === 'exam_decrypted');
+  const staffNotifications = notifications.filter(n => n.type && n.type !== 'exam_decrypted');
+
+  const displayedNotifications = activeTab === 'exam' ? examNotifications : staffNotifications;
+
+  const getNotificationDetails = (type?: string) => {
+    switch (type) {
+      case 'staff_created':
+        return {
+          icon: <UserPlus size={15} color="#2563eb" />,
+          bg: '#eef2f7',
+          title: 'Staff Member Created',
+        };
+      case 'face_enrolled':
+        return {
+          icon: <ScanFace size={15} color="#16a34a" />,
+          bg: '#ecfdf5',
+          title: 'Biometrics Enrolled',
+        };
+      case 'face_reset':
+        return {
+          icon: <ScanFace size={15} color="#d97706" />,
+          bg: '#fff7ed',
+          title: 'Biometrics Reset',
+        };
+      default:
+        return {
+          icon: <LockOpen size={15} color="#16a34a" />,
+          bg: '#dcfce7',
+          title: 'Exam Decrypted',
+        };
+    }
+  };
+
   const isDark = variant === 'dark';
 
   return (
@@ -205,65 +242,112 @@ export default function NotificationBell({ onNewNotification, variant = 'light',
             )}
           </div>
 
-          <div style={{ maxHeight: 340, overflowY: 'auto' }}>
-            {notifications.length === 0 ? (
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: '#f8fafc' }}>
+            <button
+              type="button"
+              onClick={() => setActiveTab('exam')}
+              style={{
+                flex: 1,
+                padding: '10px 0',
+                background: 'none',
+                border: 'none',
+                borderBottom: activeTab === 'exam' ? '2px solid var(--blue)' : '2px solid transparent',
+                fontSize: 12,
+                fontWeight: activeTab === 'exam' ? 700 : 500,
+                color: activeTab === 'exam' ? 'var(--blue)' : 'var(--text-3)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                outline: 'none',
+              }}
+            >
+              Exam Papers ({examNotifications.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('staff')}
+              style={{
+                flex: 1,
+                padding: '10px 0',
+                background: 'none',
+                border: 'none',
+                borderBottom: activeTab === 'staff' ? '2px solid var(--blue)' : '2px solid transparent',
+                fontSize: 12,
+                fontWeight: activeTab === 'staff' ? 700 : 500,
+                color: activeTab === 'staff' ? 'var(--blue)' : 'var(--text-3)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                outline: 'none',
+              }}
+            >
+              Staff ({staffNotifications.length})
+            </button>
+          </div>
+
+          <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+            {displayedNotifications.length === 0 ? (
               <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-                No notifications yet. You will be alerted when an exam paper is decrypted.
+                {activeTab === 'exam' 
+                  ? 'No notifications yet. You will be alerted when an exam paper is decrypted.'
+                  : 'No staff notifications yet. You will be alerted of creation or face enrollment events.'}
               </div>
             ) : (
-              notifications.map(notification => (
-                <button
-                  key={notification.id}
-                  type="button"
-                  onClick={() => !notification.read && markRead([notification.id])}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '14px 16px',
-                    border: 'none',
-                    borderBottom: '1px solid var(--border)',
-                    background: notification.read ? '#fff' : '#f0fdf4',
-                    cursor: notification.read ? 'default' : 'pointer',
-                  }}
-                >
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                    <div style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 8,
-                      background: '#dcfce7',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}>
-                      <LockOpen size={15} color="#16a34a" />
+              displayedNotifications.map(notification => {
+                const details = getNotificationDetails(notification.type);
+                return (
+                  <button
+                    key={notification.id}
+                    type="button"
+                    onClick={() => !notification.read && markRead([notification.id])}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '14px 16px',
+                      border: 'none',
+                      borderBottom: '1px solid var(--border)',
+                      background: notification.read ? '#fff' : '#f0fdf4',
+                      cursor: notification.read ? 'default' : 'pointer',
+                      display: 'block',
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                      <div style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 8,
+                        background: details.bg,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}>
+                        {details.icon}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
+                            {details.title}
+                          </span>
+                          {!notification.read && (
+                            <span style={{
+                              width: 7,
+                              height: 7,
+                              borderRadius: '50%',
+                              background: '#16a34a',
+                              flexShrink: 0,
+                            }} />
+                          )}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5, marginBottom: 6 }}>
+                          {notification.message}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                          {notification.subject ? `${notification.subject} · ` : ''}{new Date(notification.createdAt).toLocaleString('en-IN')}
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
-                          Exam Decrypted
-                        </span>
-                        {!notification.read && (
-                          <span style={{
-                            width: 7,
-                            height: 7,
-                            borderRadius: '50%',
-                            background: '#16a34a',
-                            flexShrink: 0,
-                          }} />
-                        )}
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5, marginBottom: 6 }}>
-                        {notification.message}
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                        {notification.subject} · {new Date(notification.createdAt).toLocaleString('en-IN')}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              ))
+                  </button>
+                );
+              })
             )}
           </div>
         </div>

@@ -94,6 +94,18 @@ export async function POST(request: Request) {
     store.addUser(user);
     console.log(`[STAFF CREATE] Admin created ${role} "${user.name}" (${user.username})`);
 
+    const admins = store.getUsers().filter(u => u.role === 'admin');
+    for (const admin of admins) {
+      store.addNotification({
+        id: uuidv4(),
+        userId: admin.id,
+        type: 'staff_created',
+        message: `New staff member "${user.name}" (${role === 'center_head' ? 'Center Head' : 'Invigilator'}) was created.`,
+        createdAt: new Date().toISOString(),
+        read: false,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       message: `${role === 'center_head' ? 'Center Head' : 'Invigilator'} "${user.name}" created. They must log in and enroll their face before decrypting exams.`,
@@ -132,6 +144,18 @@ export async function PATCH(request: Request) {
     }
 
     console.log(`[STAFF FACE RESET] Admin reset face for "${updated.name}"`);
+
+    const admins = store.getUsers().filter(u => u.role === 'admin');
+    for (const admin of admins) {
+      store.addNotification({
+        id: uuidv4(),
+        userId: admin.id,
+        type: 'face_reset',
+        message: `Face profile reset for "${updated.name}" (${updated.role === 'center_head' ? 'Center Head' : 'Invigilator'}).`,
+        createdAt: new Date().toISOString(),
+        read: false,
+      });
+    }
 
     return NextResponse.json({
       success: true,
