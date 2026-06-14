@@ -27,19 +27,23 @@ export default function WatermarkedPaper({
 
   useEffect(() => {
     let urlToRevoke: string | null = null;
-    if (isPdf(content) && content.startsWith('data:')) {
-      fetch(content)
-        .then(res => res.blob())
-        .then(blob => {
-          urlToRevoke = URL.createObjectURL(blob);
-          setPdfUrl(urlToRevoke);
-        })
-        .catch(err => console.error('Failed to convert data URL to blob', err));
-      
-      return () => {
-        if (urlToRevoke) URL.revokeObjectURL(urlToRevoke);
-      };
+    if (isPdf(content)) {
+      if (content.startsWith('data:')) {
+        fetch(content)
+          .then(res => res.blob())
+          .then(blob => {
+            urlToRevoke = URL.createObjectURL(blob);
+            setPdfUrl(urlToRevoke);
+          })
+          .catch(err => console.error('Failed to convert data URL to blob', err));
+      } else {
+        setPdfUrl(content);
+      }
     }
+    
+    return () => {
+      if (urlToRevoke) URL.revokeObjectURL(urlToRevoke);
+    };
   }, [content, isPdf]);
 
   return (
@@ -55,9 +59,9 @@ export default function WatermarkedPaper({
         style={{ ['--wm-text' as string]: `"${repeat}"` }}
       >
         <div className="watermarked-paper-content">
-          {isPdf(content) && (
+          {isPdf(content) && pdfUrl && (
             <iframe
-              src={pdfUrl || ''}
+              src={pdfUrl}
               width="100%"
               height="800px"
               style={{ border: 'none', display: 'block', position: 'relative', zIndex: 1 }}

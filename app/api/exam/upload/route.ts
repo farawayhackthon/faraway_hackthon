@@ -46,9 +46,9 @@ export async function POST(request: Request) {
     if (isNaN(examDate.getTime())) {
       return NextResponse.json({ error: 'Invalid exam time format' }, { status: 400 });
     }
-    if (examDate.getTime() <= Date.now() + 10 * 60 * 1000) {
+    if (examDate.getTime() <= Date.now() + 6 * 60 * 1000) {
       return NextResponse.json({
-        error: 'Exam time must be at least 10 minutes in the future',
+        error: 'Exam time must be at least 6 minutes in the future',
       }, { status: 400 });
     }
 

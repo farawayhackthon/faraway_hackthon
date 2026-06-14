@@ -70,7 +70,7 @@ export default function AdminDashboard() {
   const centerHeads  = users.filter(u => u.role === 'center_head');
   const invigilators = users.filter(u => u.role === 'invigilator');
 
-  const minExamTime = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset() + 11); return d.toISOString().slice(0, 16); };
+  const minExamTime = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset() + 7); return d.toISOString().slice(0, 16); };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -233,7 +233,7 @@ export default function AdminDashboard() {
               </div>
 
               <div style={{ marginBottom: 16 }}>
-                <label className="field-label" htmlFor="exam-time">Exam Date &amp; Time * (minimum 10 min from now)</label>
+                <label className="field-label" htmlFor="exam-time">Exam Date &amp; Time * (minimum 6 min from now)</label>
                 <input id="exam-time" className="input" type="datetime-local" min={minExamTime()} value={form.examTime} onChange={e => setForm(f => ({ ...f, examTime: e.target.value }))} required />
               </div>
 

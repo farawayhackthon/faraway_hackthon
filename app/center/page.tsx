@@ -421,16 +421,23 @@ export default function CenterPage() {
 
     setTimeout(() => {
       try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
+        if (iframe.contentWindow) {
+          const doCleanup = () => {
+            if (document.body.contains(iframe)) document.body.removeChild(iframe);
+            cleanup?.();
+          };
+          iframe.contentWindow.onbeforeprint = () => {};
+          iframe.contentWindow.onafterprint = doCleanup;
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+          // Fallback cleanup in case onafterprint doesn't fire reliably
+          setTimeout(doCleanup, 5 * 60 * 1000);
+        }
       } catch (e) {
         console.error(e);
         setMessage({ type: 'error', text: 'Failed to print. Please try again.' });
-      } finally {
-        setTimeout(() => {
-          if (document.body.contains(iframe)) document.body.removeChild(iframe);
-          cleanup?.();
-        }, 1000);
+        if (document.body.contains(iframe)) document.body.removeChild(iframe);
+        cleanup?.();
       }
     }, 500);
   };
@@ -460,16 +467,22 @@ export default function CenterPage() {
         iframe.onload = () => {
           setTimeout(() => {
             try {
-              iframe.contentWindow?.focus();
-              iframe.contentWindow?.print();
+              if (iframe.contentWindow) {
+                const doCleanup = () => {
+                  if (document.body.contains(iframe)) document.body.removeChild(iframe);
+                  URL.revokeObjectURL(blobUrl);
+                };
+                iframe.contentWindow.onbeforeprint = () => {};
+                iframe.contentWindow.onafterprint = doCleanup;
+                iframe.contentWindow.focus();
+                iframe.contentWindow.print();
+                setTimeout(doCleanup, 5 * 60 * 1000);
+              }
             } catch (e) {
               console.error(e);
               setMessage({ type: 'error', text: 'Failed to print document.' });
-            } finally {
-              setTimeout(() => {
-                if (document.body.contains(iframe)) document.body.removeChild(iframe);
-                URL.revokeObjectURL(blobUrl);
-              }, 1000);
+              if (document.body.contains(iframe)) document.body.removeChild(iframe);
+              URL.revokeObjectURL(blobUrl);
             }
           }, 500);
         };
@@ -655,9 +668,9 @@ export default function CenterPage() {
         )}
 
         {/* Message / Alert */}
-        {message && (
+        {message && message.type !== 'error' && (
           <div
-            className={`alert ${message.type === 'success' ? 'alert-success' : message.type === 'warning' ? 'alert-warning' : 'alert-error'} anim-fade-up`}
+            className={`alert ${message.type === 'success' ? 'alert-success' : 'alert-warning'} anim-fade-up`}
             style={{ marginBottom: 24 }}
           >
             <span className="alert-icon">
